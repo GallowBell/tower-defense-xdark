@@ -1,22 +1,44 @@
 import Phaser from 'phaser';
 
-import { APP_CONFIG } from '../app/config';
 import { GAME_COLORS, SCENE_KEYS } from '../app/constants';
+import { GameStateStore } from '../systems/game-state/GameStateStore';
 
 export class UIScene extends Phaser.Scene {
+  private goldText!: Phaser.GameObjects.Text;
+  private livesText!: Phaser.GameObjects.Text;
+  private waveText!: Phaser.GameObjects.Text;
+
   constructor() {
     super(SCENE_KEYS.UI);
   }
 
   create(): void {
-    const { gold, lives, wave } = APP_CONFIG.hudDefaults;
+    const store = this.registry.get('store') as GameStateStore | null;
+    if (!store) return;
 
-    this.add.rectangle(170, 44, 300, 64, Phaser.Display.Color.HexStringToColor(GAME_COLORS.panel).color, 0.95);
+    // ── Semi-transparent top bar ───────────────────────────────────────────────
+    const panelColor = Phaser.Display.Color.HexStringToColor(GAME_COLORS.panel).color;
+    this.add.rectangle(this.cameras.main.width / 2, 24, this.cameras.main.width, 48, panelColor, 0.9);
 
-    this.add.text(32, 24, `Gold: ${gold}   Lives: ${lives}   Wave: ${wave}`, {
+    // ── HUD text objects ───────────────────────────────────────────────────────
+    const textStyle: Phaser.Types.GameObjects.Text.TextStyle = {
       color: GAME_COLORS.text,
       fontFamily: 'Arial, sans-serif',
       fontSize: '20px',
-    });
+    };
+
+    this.goldText = this.add.text(32, 16, `Gold: ${store.gold}`, textStyle);
+    this.livesText = this.add.text(220, 16, `Lives: ${store.lives}`, textStyle);
+    this.waveText = this.add.text(420, 16, `Wave: ${store.wave}/${store.totalWaves}`, textStyle);
+  }
+
+  update(): void {
+    const storeRef = this.registry.get('store') as GameStateStore | null;
+    if (!storeRef) return;
+
+    const s = storeRef.snapshot();
+    this.goldText.setText(`Gold: ${s.gold}`);
+    this.livesText.setText(`Lives: ${s.lives}`);
+    this.waveText.setText(`Wave: ${s.wave}/${s.totalWaves}`);
   }
 }
