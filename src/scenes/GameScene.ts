@@ -72,7 +72,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ── 2. Map ────────────────────────────────────────────────────────────────
-    this.map = MAP_DEFINITIONS[DEFAULT_MAP_ID];
+    const selectedMapId = this.registry.get('selectedMapId') as string | null;
+    this.map = MAP_DEFINITIONS[selectedMapId ?? DEFAULT_MAP_ID];
 
     // ── 3. Placement system ───────────────────────────────────────────────────
     this.placementSystem = new PlacementSystem();
@@ -412,11 +413,45 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('selectedTowerUid', null);
     const { width, height } = this.cameras.main;
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6);
-    this.add.text(width / 2, height / 2, text, {
+    this.add.text(width / 2, height * 0.42, text, {
       color: `#${color.toString(16).padStart(6, '0')}`,
       fontFamily: 'Arial',
       fontSize: '72px',
       fontStyle: 'bold',
     }).setOrigin(0.5, 0.5);
+
+    // Restart button
+    const btnRestart = this.add.text(width / 2, height * 0.58, '▶ Play Again', {
+      color: '#f8fafc',
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      backgroundColor: '#7c3aed',
+      padding: { x: 16, y: 8 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    btnRestart.on('pointerover', () => btnRestart.setStyle({ backgroundColor: '#6d28d9' }));
+    btnRestart.on('pointerout', () => btnRestart.setStyle({ backgroundColor: '#7c3aed' }));
+    btnRestart.on('pointerdown', () => {
+      this.registry.set('store', null);
+      this.scene.stop(SCENE_KEYS.UI);
+      this.scene.restart();
+    });
+
+    // Main Menu button
+    const btnMenu = this.add.text(width / 2, height * 0.7, '← Main Menu', {
+      color: '#cbd5e1',
+      fontFamily: 'Arial',
+      fontSize: '20px',
+      backgroundColor: '#334155',
+      padding: { x: 16, y: 8 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    btnMenu.on('pointerover', () => btnMenu.setStyle({ backgroundColor: '#475569' }));
+    btnMenu.on('pointerout', () => btnMenu.setStyle({ backgroundColor: '#334155' }));
+    btnMenu.on('pointerdown', () => {
+      this.registry.set('store', null);
+      this.scene.stop(SCENE_KEYS.UI);
+      this.scene.start(SCENE_KEYS.MENU);
+    });
   }
 }

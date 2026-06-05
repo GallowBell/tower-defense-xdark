@@ -42,6 +42,24 @@ const WAYPOINTS_MAP01: Vec2[] = [
   { x: 23, y: 11 },   // exit  — right edge, row 11
 ];
 
+const WAYPOINTS_MAP02: Vec2[] = [
+  { x: 0,  y: 7  },   // entry — left edge, row 7
+  { x: 10, y: 7  },   // corner
+  { x: 10, y: 2  },   // corner — go up
+  { x: 20, y: 2  },   // corner — go right
+  { x: 20, y: 11 },   // corner — go down
+  { x: 23, y: 11 },   // exit  — right edge
+];
+
+const WAYPOINTS_MAP03: Vec2[] = [
+  { x: 0,  y: 2  },   // entry — left edge, row 2
+  { x: 7,  y: 2  },   // corner
+  { x: 7,  y: 11 },   // corner — go down
+  { x: 16, y: 11 },   // corner — go right
+  { x: 16, y: 2  },   // corner — go up
+  { x: 23, y: 2  },   // exit  — right edge, row 2
+];
+
 export const MAP_DEFINITIONS: Record<string, MapDefinition> = {
   map01: {
     id: 'map01',
@@ -50,6 +68,22 @@ export const MAP_DEFINITIONS: Record<string, MapDefinition> = {
     rows: 14,
     tiles: buildTiles(24, 14, WAYPOINTS_MAP01),
     waypoints: WAYPOINTS_MAP01,
+  },
+  map02: {
+    id: 'map02',
+    displayName: 'Zigzag',
+    cols: 24,
+    rows: 14,
+    tiles: buildTiles(24, 14, WAYPOINTS_MAP02),
+    waypoints: WAYPOINTS_MAP02,
+  },
+  map03: {
+    id: 'map03',
+    displayName: 'Serpent',
+    cols: 24,
+    rows: 14,
+    tiles: buildTiles(24, 14, WAYPOINTS_MAP03),
+    waypoints: WAYPOINTS_MAP03,
   },
 };
 
