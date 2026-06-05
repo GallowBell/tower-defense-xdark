@@ -25,6 +25,8 @@ function makeTower(overrides?: Partial<TowerState>): TowerState {
       damage: 20,
       range: 200,
       fireRate: 1.5,
+      critRate: 0.1,
+      critDamage: 1.5,
       color: 0x3b82f6,
       radius: 14,
     },

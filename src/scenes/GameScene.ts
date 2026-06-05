@@ -431,6 +431,25 @@ export class GameScene extends Phaser.Scene {
       shot.tower.worldX, shot.tower.worldY,
       shot.target.x, shot.target.y,
     );
+
+    // Floating damage number
+    const dmgStr = shot.wasCrit ? `CRIT! ${shot.damageDealt}` : `${shot.damageDealt}`;
+    const dmgText = this.add.text(shot.target.x, shot.target.y, dmgStr, {
+      color: shot.wasCrit ? '#ffd700' : '#ffffff',
+      fontFamily: 'Arial',
+      fontSize: shot.wasCrit ? '18px' : '14px',
+      fontStyle: shot.wasCrit ? 'bold' : 'normal',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5);
+
+    this.tweens.add({
+      targets: dmgText,
+      y: dmgText.y - 40,
+      alpha: 0,
+      duration: 800,
+      onComplete: () => dmgText.destroy(),
+    });
   }
 
   private drawHpBars(): void {
