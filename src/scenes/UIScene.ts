@@ -15,6 +15,7 @@ export class UIScene extends Phaser.Scene {
     { key: 'fast',  label: 'Gunner [2]   75g', cost: 75  },
     { key: 'heavy', label: 'Cannon [3]  175g', cost: 175 },
   ];
+  private upgradeTexts: Phaser.GameObjects.Text[] = [];
 
   constructor() {
     super(SCENE_KEYS.UI);
@@ -54,7 +55,6 @@ export class UIScene extends Phaser.Scene {
         const gameScene = this.scene.get(SCENE_KEYS.GAME) as unknown as { selectedArchetype: string };
         gameScene.selectedArchetype = arch.key;
         this.selectedIndex = i;
-        // Highlight selected, deselect others
         this.selectorTexts.forEach((st, j) => {
           st.setStyle({ backgroundColor: j === i ? '#7c3aed' : '#1d4ed8' });
         });
@@ -86,5 +86,49 @@ export class UIScene extends Phaser.Scene {
       const canAfford = gold >= arch.cost;
       t.setAlpha(i === this.selectedIndex ? (canAfford ? 1 : 0.6) : (canAfford ? 1 : 0.4));
     });
+
+    // ── Tower Upgrade Panel ──────────────────────────────────────────────────
+    this.upgradeTexts.forEach(t => t.destroy());
+    this.upgradeTexts = [];
+
+    const selectedUid = this.registry.get('selectedTowerUid') as string | null;
+    if (selectedUid) {
+      const gs = this.scene.get(SCENE_KEYS.GAME) as unknown as {
+        store: GameStateStore;
+        upgradeSystem: {
+          getUpgradeCost(tower: { definition: { cost: number }; level: number }): number;
+          getProjectedStats(tower: any): { nextDamage: number; nextRange: number; nextFireRate: number; cost: number };
+          canUpgrade(tower: any, gold: number): boolean;
+        };
+      };
+
+      const selectedTower = gs.store.towers.find(t => t.uid === selectedUid);
+      if (selectedTower && gs.upgradeSystem) {
+        const upgrades = gs.upgradeSystem;
+        const proj = upgrades.getProjectedStats(selectedTower);
+        const canAfford = upgrades.canUpgrade(selectedTower, storeRef.gold);
+
+        const panelX = 16;
+        const panelY = 80;
+        const infoLines = [
+          `${selectedTower.definition.displayName} Lv.${selectedTower.level}`,
+          `DMG: ${selectedTower.definition.damage} → ${proj.nextDamage}`,
+          `RNG: ${selectedTower.definition.range} → ${proj.nextRange}`,
+          `SPD: ${selectedTower.definition.fireRate.toFixed(1)} → ${proj.nextFireRate.toFixed(1)}`,
+          `Upgrade: ${proj.cost}g`,
+        ];
+
+        infoLines.forEach((line, i) => {
+          const t = this.add.text(panelX, panelY + i * 20, line, {
+            color: '#f8fafc',
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '14px',
+            backgroundColor: canAfford ? '#1e3a5f' : '#3a1a1a',
+            padding: { x: 4, y: 2 },
+          });
+          this.upgradeTexts.push(t);
+        });
+      }
+    }
   }
 }

@@ -18,6 +18,7 @@ import { worldToGrid, tileRect, getTileType, waypointsToWorld } from '../utils/g
 import { TowerRenderer } from '../systems/render/TowerRenderer';
 import { EnemyRenderer } from '../systems/render/EnemyRenderer';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
+import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 
 export class GameScene extends Phaser.Scene {
   private store!: GameStateStore;
@@ -47,9 +48,13 @@ export class GameScene extends Phaser.Scene {
 
   // ── Combat fields ─────────────────────────────────────────────────────────
   private combatSystem!: CombatSystem;
-  private shotGraphics!: Phaser.GameObjects.Graphics;  // reused each frame for shot lines
-  private hpGraphics!: Phaser.GameObjects.Graphics;    // reused each frame for HP bars
+  private shotGraphics!: Phaser.GameObjects.Graphics;
+  private hpGraphics!: Phaser.GameObjects.Graphics;
   private rangeIndicator!: Phaser.GameObjects.Graphics;
+
+  // ── Upgrade fields ────────────────────────────────────────────────────────
+  private upgradeSystem!: TowerUpgradeSystem;
+  private selectedTowerUid: string | null = null;
 
   // ── Overlay guard ─────────────────────────────────────────────────────────
   private overlayShown = false;
@@ -92,6 +97,11 @@ export class GameScene extends Phaser.Scene {
     this.towerGraphics = this.add.graphics();
     this.projectileGraphics = this.add.graphics();
 
+    // ── 4d. Upgrade system ────────────────────────────────────────────────────
+    this.upgradeSystem = new TowerUpgradeSystem();
+    this.selectedTowerUid = null;
+    this.registry.set('selectedTowerUid', null);
+
     // ── 5. Draw tile grid ─────────────────────────────────────────────────────
     for (let row = 0; row < this.map.rows; row++) {
       for (let col = 0; col < this.map.cols; col++) {
@@ -111,31 +121,49 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // ── 6. Pointer interactions — place (left) / sell (right) ─────────────────
+    // ── 6. Pointer interactions ───────────────────────────────────────────────
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (pointer.leftButtonDown()) {
-        // ── Left-click: Tower placement ──────────────────────────────────
-        const grid = worldToGrid(pointer.worldX, pointer.worldY);
-        if (!grid) return;
+        // ── Left-click: check if clicking on a placed tower → select it ──
+        let clickedTower: typeof this.store.towers[number] | null = null;
+        for (const t of this.store.towers) {
+          const dx = pointer.worldX - t.worldX;
+          const dy = pointer.worldY - t.worldY;
+          if (Math.sqrt(dx * dx + dy * dy) < t.definition.radius + 20) {
+            clickedTower = t;
+            break;
+          }
+        }
 
-        const result = this.placementSystem.attempt(
-          this.map,
-          this.store.towers,
-          this.store.gold,
-          this.store.gameState,
-          grid.x,
-          grid.y,
-          this.selectedArchetype,
-        );
+        if (clickedTower) {
+          // Toggle selection
+          this.selectedTowerUid = this.selectedTowerUid === clickedTower.uid ? null : clickedTower.uid;
+          this.registry.set('selectedTowerUid', this.selectedTowerUid);
+        } else {
+          // ── Not clicking a tower → try placement ──────────────────────
+          const grid = worldToGrid(pointer.worldX, pointer.worldY);
+          if (!grid) return;
 
-        if (result.success) {
-          this.store.addTower(result.tower!);
-          this.store.spendGold(result.goldSpent!);
-          // Towers are now drawn by TowerRenderer via drawHpBars()
+          const result = this.placementSystem.attempt(
+            this.map,
+            this.store.towers,
+            this.store.gold,
+            this.store.gameState,
+            grid.x,
+            grid.y,
+            this.selectedArchetype,
+          );
+
+          if (result.success) {
+            this.store.addTower(result.tower!);
+            this.store.spendGold(result.goldSpent!);
+            this.selectedTowerUid = null;
+            this.registry.set('selectedTowerUid', null);
+          }
         }
       } else if (pointer.rightButtonDown()) {
         // ── Right-click: Sell tower for 50% refund ──────────────────────
-        const sellRadius = 30; // px tolerance
+        const sellRadius = 30;
         for (let i = this.store.towers.length - 1; i >= 0; i--) {
           const tower = this.store.towers[i];
           const dx = pointer.worldX - tower.worldX;
@@ -146,7 +174,11 @@ export class GameScene extends Phaser.Scene {
             const refund = Math.floor(tower.definition.cost * 0.5);
             this.store.earnGold(refund);
             this.store.removeTower(tower.uid);
-            break; // sell one at a time
+            if (this.selectedTowerUid === tower.uid) {
+              this.selectedTowerUid = null;
+              this.registry.set('selectedTowerUid', null);
+            }
+            break;
           }
         }
       }
@@ -156,25 +188,34 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.rangeIndicator.clear();
 
-      const hoverRadius = 20; // px tolerance for "near" a tower
+      const hoverRadius = 20;
       for (const tower of this.store.towers) {
         const dx = pointer.worldX - tower.worldX;
         const dy = pointer.worldY - tower.worldY;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < tower.definition.radius + hoverRadius) {
-          // Draw range circle
           this.rangeIndicator.lineStyle(1, 0xffffff, 0.3);
           this.rangeIndicator.strokeCircle(tower.worldX, tower.worldY, tower.definition.range);
           this.rangeIndicator.fillStyle(tower.definition.color, 0.08);
           this.rangeIndicator.fillCircle(tower.worldX, tower.worldY, tower.definition.range);
-          break; // only show one at a time (nearest)
+          break;
         }
       }
     });
 
     // ── 6c. Disable browser right-click context menu ──────────────────────────
     this.input.mouse?.disableContextMenu();
+
+    // ── 6d. Upgrade hotkey [U] ────────────────────────────────────────────────
+    this.input.keyboard?.on('keydown-U', () => {
+      if (!this.selectedTowerUid) return;
+      const tower = this.store.towers.find(t => t.uid === this.selectedTowerUid);
+      if (!tower || !this.upgradeSystem.canUpgrade(tower, this.store.gold)) return;
+      this.upgradeSystem.applyUpgrade(tower);
+      this.store.spendGold(this.upgradeSystem.getUpgradeCost(tower));
+      this.registry.set('selectedTowerUid', this.selectedTowerUid); // refresh UI
+    });
 
     // ── 7. Start Wave button ──────────────────────────────────────────────────
     this.add
@@ -199,10 +240,10 @@ export class GameScene extends Phaser.Scene {
 
   private startNextWave(): void {
     if (this.store.gameState !== 'idle' && this.store.gameState !== 'wave_cleared') return;
-    const waveIndex = this.store.wave - 1; // store.wave is 1-based display, WAVE_DEFINITIONS is 0-indexed
+    const waveIndex = this.store.wave - 1;
     const waveDef = WAVE_DEFINITIONS[waveIndex];
     if (!waveDef) return;
-    this.store.nextWave(); // sets gameState = 'wave_active'
+    this.store.nextWave();
     this.waveSpawnComplete = false;
     this.waveSystem.startWave(waveDef);
   }
@@ -210,14 +251,13 @@ export class GameScene extends Phaser.Scene {
   // ── Per-frame update ──────────────────────────────────────────────────────
 
   update(_time: number, delta: number): void {
-    // Once overlay is shown the game has ended — stop running game logic.
     if (this.overlayShown) return;
 
-    const dt = delta / 1000; // convert ms → seconds
+    const dt = delta / 1000;
 
     // ── Tick wave spawner ─────────────────────────────────────────────────────
     if (this.store.gameState === 'wave_active') {
-      const spawnPos = this.worldWaypoints[0]; // enemies spawn at first waypoint
+      const spawnPos = this.worldWaypoints[0];
       this.waveSystem.update(dt, spawnPos, {
         onSpawn: (enemy) => {
           this.enemies.push(enemy);
@@ -233,11 +273,9 @@ export class GameScene extends Phaser.Scene {
     // ── Advance enemies along path ────────────────────────────────────────────
     for (const enemy of this.enemies) {
       if (enemy.dead || enemy.leaked) {
-        // handle leaked — deduct life (leaked flag set but not yet marked dead)
         if (enemy.leaked && !enemy.dead) {
-          enemy.dead = true; // mark to avoid double-counting
+          enemy.dead = true;
           this.store.loseLife();
-          // Remove graphics
           const g = this.enemyObjects.get(enemy.uid);
           if (g) { g.destroy(); this.enemyObjects.delete(enemy.uid); }
         }
@@ -246,13 +284,11 @@ export class GameScene extends Phaser.Scene {
 
       this.pathSystem.advance(enemy, this.worldWaypoints, dt);
 
-      // Update graphic position
       const g = this.enemyObjects.get(enemy.uid);
       if (g && 'setPosition' in g) {
         (g as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
       }
 
-      // Check if just leaked after advance
       if (enemy.leaked) {
         enemy.dead = true;
         this.store.loseLife();
@@ -266,12 +302,11 @@ export class GameScene extends Phaser.Scene {
       const shots = this.combatSystem.tick(this.store.towers, this.enemies, dt);
       for (const shot of shots) {
         this.handleShot(shot);
-        // Fire projectile visuals
         if (shot.target && !shot.target.dead) {
           this.projectileSystem.fire(
             shot.tower.worldX,
             shot.tower.worldY,
-            { uid: shot.target.uid, x: shot.target.x, y: shot.target.y },
+            { uid: shot.target.uid, x: shot.target.x,   y: shot.target.y },
             shot.tower.definition.color,
           );
         }
@@ -282,17 +317,14 @@ export class GameScene extends Phaser.Scene {
     this.projectileSystem.update(
       dt,
       this.enemies.map((e) => ({
-        uid: e.uid,
-        x: e.x,
-        y: e.y,
-        dead: e.dead,
+        uid: e.uid, x: e.x, y: e.y, dead: e.dead,
       })),
     );
 
-    // ── Draw HP bars, towers, and projectiles ────────────────────────────────
+    // ── Draw everything ──────────────────────────────────────────────────────
     this.drawHpBars();
 
-    // ── Check wave cleared: spawn done AND all enemies dead/leaked ────────────
+    // ── Check wave cleared ────────────────────────────────────────────────────
     const allEnemiesDone = this.enemies.length > 0 && this.enemies.every(e => e.dead);
     if (this.store.gameState === 'wave_active' && this.waveSpawnComplete && allEnemiesDone) {
       this.enemies = this.enemies.filter(e => !e.dead);
@@ -312,17 +344,12 @@ export class GameScene extends Phaser.Scene {
   // ── Combat helpers ────────────────────────────────────────────────────────
 
   private handleShot(shot: ShotEvent): void {
-    // 1. Earn gold if killed
     if (shot.killed) {
       this.store.earnGold(shot.goldEarned);
-      // Remove enemy graphics
       const g = this.enemyObjects.get(shot.target.uid);
       if (g) { g.destroy(); this.enemyObjects.delete(shot.target.uid); }
     }
 
-    // 2. Draw a brief shot line from tower to enemy
-    //    shotGraphics is cleared at the start of each frame in drawHpBars()
-    //    Line: white (0xffffff), alpha 0.7, lineWidth 1
     this.shotGraphics.lineStyle(1, 0xffffff, 0.7);
     this.shotGraphics.lineBetween(
       shot.tower.worldX, shot.tower.worldY,
@@ -331,7 +358,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawHpBars(): void {
-    // Clear ALL graphics objects at start of each frame
     this.shotGraphics.clear();
     this.hpGraphics.clear();
     this.towerGraphics.clear();
@@ -341,16 +367,24 @@ export class GameScene extends Phaser.Scene {
     // Draw towers
     this.towerRenderer.draw(this.towerGraphics, this.store.towers);
 
+    // Draw selection ring around selected tower
+    if (this.selectedTowerUid) {
+      const selected = this.store.towers.find(t => t.uid === this.selectedTowerUid);
+      if (selected) {
+        this.towerGraphics.lineStyle(2, 0xffffff, 0.6);
+        this.towerGraphics.strokeCircle(selected.worldX, selected.worldY, selected.definition.radius + 4);
+      }
+    }
+
     // Draw projectiles
     for (const proj of this.projectileSystem.getAlive()) {
-      // Interpolate projectile position
       const px = proj.startX + (proj.targetX - proj.startX) * proj.progress;
       const py = proj.startY + (proj.targetY - proj.startY) * proj.progress;
       this.projectileGraphics.fillStyle(proj.color, 1);
       this.projectileGraphics.fillCircle(px, py, 3);
     }
 
-    // For each alive enemy, draw an HP bar above it
+    // Draw HP bars above alive enemies
     for (const enemy of this.enemies) {
       if (enemy.dead) continue;
 
@@ -359,11 +393,9 @@ export class GameScene extends Phaser.Scene {
       const barX = enemy.x - enemy.radius;
       const barY = enemy.y - enemy.radius - 8;
 
-      // Background (dark red)
       this.hpGraphics.fillStyle(0x7f1d1d, 1);
       this.hpGraphics.fillRect(barX, barY, barWidth, barHeight);
 
-      // Health portion (bright green → yellow → red based on hp ratio)
       const ratio = enemy.hp / enemy.maxHp;
       const hpColor = ratio > 0.5 ? 0x22c55e : ratio > 0.25 ? 0xeab308 : 0xef4444;
       this.hpGraphics.fillStyle(hpColor, 1);
@@ -376,6 +408,8 @@ export class GameScene extends Phaser.Scene {
   private showOverlay(text: string, color: number): void {
     if (this.overlayShown) return;
     this.overlayShown = true;
+    this.selectedTowerUid = null;
+    this.registry.set('selectedTowerUid', null);
     const { width, height } = this.cameras.main;
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6);
     this.add.text(width / 2, height / 2, text, {

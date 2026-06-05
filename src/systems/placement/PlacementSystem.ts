@@ -46,6 +46,7 @@ export class PlacementSystem {
       worldX: pos.x,
       worldY: pos.y,
       cooldown: 0,
+      level: 1,
       definition: def,
     };
     return { success: true, tower, goldSpent: def.cost };

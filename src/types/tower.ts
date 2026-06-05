@@ -23,5 +23,7 @@ export interface TowerState {
   worldY: number;
   /** Time remaining until next shot, in seconds */
   cooldown: number;
+  /** Upgrade level (1-based) */
+  level: number;
   definition: TowerDefinition;
 }
