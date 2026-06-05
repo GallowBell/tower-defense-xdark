@@ -49,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private combatSystem!: CombatSystem;
   private shotGraphics!: Phaser.GameObjects.Graphics;  // reused each frame for shot lines
   private hpGraphics!: Phaser.GameObjects.Graphics;    // reused each frame for HP bars
+  private rangeIndicator!: Phaser.GameObjects.Graphics;
 
   // ── Overlay guard ─────────────────────────────────────────────────────────
   private overlayShown = false;
@@ -83,6 +84,7 @@ export class GameScene extends Phaser.Scene {
     this.combatSystem = new CombatSystem();
     this.shotGraphics = this.add.graphics();
     this.hpGraphics = this.add.graphics();
+    this.rangeIndicator = this.add.graphics();
 
     // ── 4c. Visual systems ───────────────────────────────────────────────────
     this.towerRenderer = new TowerRenderer();
@@ -109,27 +111,70 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // ── 6. Pointer click — tower placement ────────────────────────────────────
+    // ── 6. Pointer interactions — place (left) / sell (right) ─────────────────
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      const grid = worldToGrid(pointer.worldX, pointer.worldY);
-      if (!grid) return;
+      if (pointer.leftButtonDown()) {
+        // ── Left-click: Tower placement ──────────────────────────────────
+        const grid = worldToGrid(pointer.worldX, pointer.worldY);
+        if (!grid) return;
 
-      const result = this.placementSystem.attempt(
-        this.map,
-        this.store.towers,
-        this.store.gold,
-        this.store.gameState,
-        grid.x,
-        grid.y,
-        this.selectedArchetype,
-      );
+        const result = this.placementSystem.attempt(
+          this.map,
+          this.store.towers,
+          this.store.gold,
+          this.store.gameState,
+          grid.x,
+          grid.y,
+          this.selectedArchetype,
+        );
 
-      if (result.success) {
-        this.store.addTower(result.tower!);
-        this.store.spendGold(result.goldSpent!);
-        // Towers are now drawn by TowerRenderer via drawHpBars()
+        if (result.success) {
+          this.store.addTower(result.tower!);
+          this.store.spendGold(result.goldSpent!);
+          // Towers are now drawn by TowerRenderer via drawHpBars()
+        }
+      } else if (pointer.rightButtonDown()) {
+        // ── Right-click: Sell tower for 50% refund ──────────────────────
+        const sellRadius = 30; // px tolerance
+        for (let i = this.store.towers.length - 1; i >= 0; i--) {
+          const tower = this.store.towers[i];
+          const dx = pointer.worldX - tower.worldX;
+          const dy = pointer.worldY - tower.worldY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < tower.definition.radius + sellRadius) {
+            const refund = Math.floor(tower.definition.cost * 0.5);
+            this.store.earnGold(refund);
+            this.store.removeTower(tower.uid);
+            break; // sell one at a time
+          }
+        }
       }
     });
+
+    // ── 6b. Pointer move — range indicator on hover ──────────────────────────
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      this.rangeIndicator.clear();
+
+      const hoverRadius = 20; // px tolerance for "near" a tower
+      for (const tower of this.store.towers) {
+        const dx = pointer.worldX - tower.worldX;
+        const dy = pointer.worldY - tower.worldY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < tower.definition.radius + hoverRadius) {
+          // Draw range circle
+          this.rangeIndicator.lineStyle(1, 0xffffff, 0.3);
+          this.rangeIndicator.strokeCircle(tower.worldX, tower.worldY, tower.definition.range);
+          this.rangeIndicator.fillStyle(tower.definition.color, 0.08);
+          this.rangeIndicator.fillCircle(tower.worldX, tower.worldY, tower.definition.range);
+          break; // only show one at a time (nearest)
+        }
+      }
+    });
+
+    // ── 6c. Disable browser right-click context menu ──────────────────────────
+    this.input.mouse?.disableContextMenu();
 
     // ── 7. Start Wave button ──────────────────────────────────────────────────
     this.add
@@ -291,6 +336,7 @@ export class GameScene extends Phaser.Scene {
     this.hpGraphics.clear();
     this.towerGraphics.clear();
     this.projectileGraphics.clear();
+    this.rangeIndicator.clear();
 
     // Draw towers
     this.towerRenderer.draw(this.towerGraphics, this.store.towers);
