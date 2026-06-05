@@ -9,6 +9,12 @@ export class UIScene extends Phaser.Scene {
   private waveText!: Phaser.GameObjects.Text;
   private stateText!: Phaser.GameObjects.Text;
   private selectorTexts: Phaser.GameObjects.Text[] = [];
+  private selectedIndex: number = 0;
+  private archetypes: Array<{ key: string; label: string; cost: number }> = [
+    { key: 'basic', label: 'Archer [1]  100g', cost: 100 },
+    { key: 'fast',  label: 'Gunner [2]   75g', cost: 75  },
+    { key: 'heavy', label: 'Cannon [3]  175g', cost: 175 },
+  ];
 
   constructor() {
     super(SCENE_KEYS.UI);
@@ -35,13 +41,7 @@ export class UIScene extends Phaser.Scene {
     this.stateText = this.add.text(900, 16, `State: ${store.gameState}`, textStyle);
 
     // ── Tower selector bar ────────────────────────────────────────────────────
-    const archetypes: Array<{ key: string; label: string }> = [
-      { key: 'basic', label: 'Archer [1]  100g' },
-      { key: 'fast',  label: 'Gunner [2]   75g' },
-      { key: 'heavy', label: 'Cannon [3]  175g' },
-    ];
-
-    archetypes.forEach((arch, i) => {
+    this.archetypes.forEach((arch, i) => {
       const t = this.add.text(40 + i * 280, 680, arch.label, {
         color: '#f8fafc',
         fontFamily: 'Arial, sans-serif',
@@ -53,6 +53,7 @@ export class UIScene extends Phaser.Scene {
       t.on('pointerdown', () => {
         const gameScene = this.scene.get(SCENE_KEYS.GAME) as unknown as { selectedArchetype: string };
         gameScene.selectedArchetype = arch.key;
+        this.selectedIndex = i;
         // Highlight selected, deselect others
         this.selectorTexts.forEach((st, j) => {
           st.setStyle({ backgroundColor: j === i ? '#7c3aed' : '#1d4ed8' });
@@ -77,5 +78,13 @@ export class UIScene extends Phaser.Scene {
     this.livesText.setText(`Lives: ${s.lives}`);
     this.waveText.setText(`Wave: ${s.wave}/${s.totalWaves}`);
     this.stateText.setText('State: ' + s.gameState);
+
+    // ── Update selector button affordability ──────────────────────────────────
+    const gold = s.gold;
+    this.selectorTexts.forEach((t, i) => {
+      const arch = this.archetypes[i];
+      const canAfford = gold >= arch.cost;
+      t.setAlpha(i === this.selectedIndex ? (canAfford ? 1 : 0.6) : (canAfford ? 1 : 0.4));
+    });
   }
 }
