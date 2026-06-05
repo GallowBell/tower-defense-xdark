@@ -9,6 +9,8 @@ import { PathSystem } from '../systems/path/PathSystem';
 import { EnemyFactory } from '../systems/enemies/EnemyFactory';
 import { WaveSystem } from '../systems/waves/WaveSystem';
 import { WAVE_DEFINITIONS } from '../systems/waves/waveDefinitions';
+import { CombatSystem } from '../systems/combat/CombatSystem';
+import type { ShotEvent } from '../systems/combat/CombatSystem';
 import type { EnemyState } from '../types/enemy';
 import type { TowerArchetype } from '../types/tower';
 import type { Vec2 } from '../types/game';
@@ -30,6 +32,11 @@ export class GameScene extends Phaser.Scene {
   private enemies: EnemyState[] = [];
   private enemyGraphics!: Map<string, Phaser.GameObjects.Arc>;
   private waveSpawnComplete: boolean = false;
+
+  // ── Combat fields ─────────────────────────────────────────────────────────
+  private combatSystem!: CombatSystem;
+  private shotGraphics!: Phaser.GameObjects.Graphics;  // reused each frame for shot lines
+  private hpGraphics!: Phaser.GameObjects.Graphics;    // reused each frame for HP bars
 
   // ── Overlay guard ─────────────────────────────────────────────────────────
   private overlayShown = false;
@@ -58,6 +65,11 @@ export class GameScene extends Phaser.Scene {
     this.waveSystem = new WaveSystem(this.enemyFactory);
     this.worldWaypoints = waypointsToWorld(this.map);
     this.enemyGraphics = new Map();
+
+    // ── 4b. Combat system ─────────────────────────────────────────────────────
+    this.combatSystem = new CombatSystem();
+    this.shotGraphics = this.add.graphics();
+    this.hpGraphics = this.add.graphics();
 
     // ── 5. Draw tile grid ─────────────────────────────────────────────────────
     for (let row = 0; row < this.map.rows; row++) {
@@ -157,7 +169,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ── Advance enemies along path ────────────────────────────────────────────
-    let allEnemiesDone = this.enemies.length > 0;
     for (const enemy of this.enemies) {
       if (enemy.dead || enemy.leaked) {
         // handle leaked — deduct life (leaked flag set but not yet marked dead)
@@ -184,11 +195,21 @@ export class GameScene extends Phaser.Scene {
         const gr = this.enemyGraphics.get(enemy.uid);
         if (gr) { gr.destroy(); this.enemyGraphics.delete(enemy.uid); }
       }
-
-      if (!enemy.dead) allEnemiesDone = false;
     }
 
+    // ── Combat tick ──────────────────────────────────────────────────────────
+    if (this.store.gameState === 'wave_active') {
+      const shots = this.combatSystem.tick(this.store.towers, this.enemies, dt);
+      for (const shot of shots) {
+        this.handleShot(shot);
+      }
+    }
+
+    // ── Draw HP bars ─────────────────────────────────────────────────────────
+    this.drawHpBars();
+
     // ── Check wave cleared: spawn done AND all enemies dead/leaked ────────────
+    const allEnemiesDone = this.enemies.length > 0 && this.enemies.every(e => e.dead);
     if (this.store.gameState === 'wave_active' && this.waveSpawnComplete && allEnemiesDone) {
       this.enemies = this.enemies.filter(e => !e.dead);
       this.store.earnGold(WAVE_DEFINITIONS[this.store.wave - 1]?.goldBonus ?? 0);
@@ -201,6 +222,53 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.store.gameState === 'victory') {
       this.showOverlay('VICTORY!', 0x22c55e);
+    }
+  }
+
+  // ── Combat helpers ────────────────────────────────────────────────────────
+
+  private handleShot(shot: ShotEvent): void {
+    // 1. Earn gold if killed
+    if (shot.killed) {
+      this.store.earnGold(shot.goldEarned);
+      // Remove enemy graphics
+      const g = this.enemyGraphics.get(shot.target.uid);
+      if (g) { g.destroy(); this.enemyGraphics.delete(shot.target.uid); }
+    }
+
+    // 2. Draw a brief shot line from tower to enemy
+    //    shotGraphics is cleared at the start of each frame in drawHpBars()
+    //    Line: white (0xffffff), alpha 0.7, lineWidth 1
+    this.shotGraphics.lineStyle(1, 0xffffff, 0.7);
+    this.shotGraphics.lineBetween(
+      shot.tower.worldX, shot.tower.worldY,
+      shot.target.x, shot.target.y,
+    );
+  }
+
+  private drawHpBars(): void {
+    // Clear both graphics objects at start of each frame
+    this.shotGraphics.clear();
+    this.hpGraphics.clear();
+
+    // For each alive enemy, draw an HP bar above it
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+
+      const barWidth = enemy.radius * 2;
+      const barHeight = 4;
+      const barX = enemy.x - enemy.radius;
+      const barY = enemy.y - enemy.radius - 8;
+
+      // Background (dark red)
+      this.hpGraphics.fillStyle(0x7f1d1d, 1);
+      this.hpGraphics.fillRect(barX, barY, barWidth, barHeight);
+
+      // Health portion (bright green → yellow → red based on hp ratio)
+      const ratio = enemy.hp / enemy.maxHp;
+      const hpColor = ratio > 0.5 ? 0x22c55e : ratio > 0.25 ? 0xeab308 : 0xef4444;
+      this.hpGraphics.fillStyle(hpColor, 1);
+      this.hpGraphics.fillRect(barX, barY, barWidth * ratio, barHeight);
     }
   }
 
