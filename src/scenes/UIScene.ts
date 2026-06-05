@@ -25,6 +25,12 @@ export class UIScene extends Phaser.Scene {
     const store = this.registry.get('store') as GameStateStore | null;
     if (!store) return;
 
+    // ── Reset state from any previous launch (scene.stop/launch reuses instance) ──
+    this.selectorTexts = [];
+    this.upgradeTexts = [];
+    this.selectedIndex = 0;
+    this.input.keyboard?.removeAllListeners();
+
     // ── Semi-transparent top bar ───────────────────────────────────────────────
     const panelColor = Phaser.Display.Color.HexStringToColor(GAME_COLORS.panel).color;
     this.add.rectangle(this.cameras.main.width / 2, 24, this.cameras.main.width, 48, panelColor, 0.9);
