@@ -8,6 +8,7 @@ export class UIScene extends Phaser.Scene {
   private livesText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
   private stateText!: Phaser.GameObjects.Text;
+  private selectorTexts: Phaser.GameObjects.Text[] = [];
 
   constructor() {
     super(SCENE_KEYS.UI);
@@ -32,6 +33,39 @@ export class UIScene extends Phaser.Scene {
     this.livesText = this.add.text(220, 16, `Lives: ${store.lives}`, textStyle);
     this.waveText = this.add.text(420, 16, `Wave: ${store.wave}/${store.totalWaves}`, textStyle);
     this.stateText = this.add.text(900, 16, `State: ${store.gameState}`, textStyle);
+
+    // ── Tower selector bar ────────────────────────────────────────────────────
+    const archetypes: Array<{ key: string; label: string }> = [
+      { key: 'basic', label: 'Archer [1]  100g' },
+      { key: 'fast',  label: 'Gunner [2]   75g' },
+      { key: 'heavy', label: 'Cannon [3]  175g' },
+    ];
+
+    archetypes.forEach((arch, i) => {
+      const t = this.add.text(40 + i * 280, 680, arch.label, {
+        color: '#f8fafc',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '16px',
+        backgroundColor: '#1d4ed8',
+        padding: { x: 8, y: 4 },
+      }).setInteractive();
+
+      t.on('pointerdown', () => {
+        const gameScene = this.scene.get(SCENE_KEYS.GAME) as unknown as { selectedArchetype: string };
+        gameScene.selectedArchetype = arch.key;
+        // Highlight selected, deselect others
+        this.selectorTexts.forEach((st, j) => {
+          st.setStyle({ backgroundColor: j === i ? '#7c3aed' : '#1d4ed8' });
+        });
+      });
+
+      this.selectorTexts.push(t);
+    });
+
+    // ── Keyboard shortcuts 1 / 2 / 3 ─────────────────────────────────────────
+    this.input.keyboard?.on('keydown-ONE',   () => this.selectorTexts[0]?.emit('pointerdown'));
+    this.input.keyboard?.on('keydown-TWO',   () => this.selectorTexts[1]?.emit('pointerdown'));
+    this.input.keyboard?.on('keydown-THREE', () => this.selectorTexts[2]?.emit('pointerdown'));
   }
 
   update(): void {
