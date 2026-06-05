@@ -20,6 +20,8 @@ import { EnemyRenderer } from '../systems/render/EnemyRenderer';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { SkinManager } from '../systems/skins/SkinManager';
+import { SoundManager } from '../systems/audio/SoundManager';
+import { ParticleManager } from '../systems/effects/ParticleManager';
 
 export class GameScene extends Phaser.Scene {
   private store!: GameStateStore;
@@ -62,6 +64,10 @@ export class GameScene extends Phaser.Scene {
 
   // ── Skin manager ──────────────────────────────────────────────────────────
   private skinManager!: SkinManager;
+
+  // ── Audio / effects ────────────────────────────────────────────────────────
+  private soundManager!: SoundManager;
+  private particleManager!: ParticleManager;
 
   constructor() {
     super(SCENE_KEYS.GAME);
@@ -110,6 +116,10 @@ export class GameScene extends Phaser.Scene {
     // ── 4e. Skin system ───────────────────────────────────────────────────────
     const selectedTheme = this.registry.get('selectedTheme') as string | null;
     this.skinManager = new SkinManager(selectedTheme ?? undefined);
+
+    // ── 4f. Audio / effects ────────────────────────────────────────────────────
+    this.soundManager = new SoundManager();
+    this.particleManager = new ParticleManager(this);
 
     // ── 5. Draw tile grid ─────────────────────────────────────────────────────
     for (let row = 0; row < this.map.rows; row++) {
@@ -166,6 +176,7 @@ export class GameScene extends Phaser.Scene {
           if (result.success) {
             this.store.addTower(result.tower!);
             this.store.spendGold(result.goldSpent!);
+            this.soundManager.playUIClick();
             this.selectedTowerUid = null;
             this.registry.set('selectedTowerUid', null);
           }
@@ -182,6 +193,7 @@ export class GameScene extends Phaser.Scene {
           if (dist < tower.definition.radius + sellRadius) {
             const refund = Math.floor(tower.definition.cost * 0.5);
             this.store.earnGold(refund);
+            this.soundManager.playSell();
             this.store.removeTower(tower.uid);
             if (this.selectedTowerUid === tower.uid) {
               this.selectedTowerUid = null;
@@ -223,7 +235,9 @@ export class GameScene extends Phaser.Scene {
       if (!tower || !this.upgradeSystem.canUpgrade(tower, this.store.gold)) return;
       this.upgradeSystem.applyUpgrade(tower);
       this.store.spendGold(this.upgradeSystem.getUpgradeCost(tower));
-      this.registry.set('selectedTowerUid', this.selectedTowerUid); // refresh UI
+      this.soundManager.playUpgrade();
+      this.particleManager.towerUpgrade(tower.worldX, tower.worldY);
+      this.registry.set('selectedTowerUid', this.selectedTowerUid);
     });
 
     // ── 7. Start Wave button ──────────────────────────────────────────────────
@@ -253,6 +267,7 @@ export class GameScene extends Phaser.Scene {
     const waveDef = WAVE_DEFINITIONS[waveIndex];
     if (!waveDef) return;
     this.store.nextWave();
+    this.soundManager.playWaveStart();
     this.waveSpawnComplete = false;
     this.waveSystem.startWave(waveDef);
   }
@@ -286,6 +301,8 @@ export class GameScene extends Phaser.Scene {
         if (enemy.leaked && !enemy.dead) {
           enemy.dead = true;
           this.store.loseLife();
+          this.soundManager.playEnemyDeath();
+          this.particleManager.enemyLeaked(enemy.x, enemy.y);
           const g = this.enemyObjects.get(enemy.uid);
           if (g) { g.destroy(); this.enemyObjects.delete(enemy.uid); }
         }
@@ -302,6 +319,8 @@ export class GameScene extends Phaser.Scene {
       if (enemy.leaked) {
         enemy.dead = true;
         this.store.loseLife();
+        this.soundManager.playEnemyDeath();
+        this.particleManager.enemyLeaked(enemy.x, enemy.y);
         const gr = this.enemyObjects.get(enemy.uid);
         if (gr) { gr.destroy(); this.enemyObjects.delete(enemy.uid); }
       }
@@ -339,6 +358,7 @@ export class GameScene extends Phaser.Scene {
     if (this.store.gameState === 'wave_active' && this.waveSpawnComplete && allEnemiesDone) {
       this.enemies = this.enemies.filter(e => !e.dead);
       this.store.earnGold(WAVE_DEFINITIONS[this.store.wave - 1]?.goldBonus ?? 0);
+      this.soundManager.playWaveCleared();
       this.store.onWaveCleared();
     }
 
@@ -356,10 +376,15 @@ export class GameScene extends Phaser.Scene {
   private handleShot(shot: ShotEvent): void {
     if (shot.killed) {
       this.store.earnGold(shot.goldEarned);
+      this.soundManager.playGoldEarned();
+      this.soundManager.playEnemyDeath();
+      this.particleManager.enemyDeath(shot.target);
       const g = this.enemyObjects.get(shot.target.uid);
       if (g) { g.destroy(); this.enemyObjects.delete(shot.target.uid); }
     }
 
+    this.soundManager.playShoot();
+    this.particleManager.towerFire(shot.tower.worldX, shot.tower.worldY, shot.tower.definition.color);
     this.shotGraphics.lineStyle(1, 0xffffff, 0.7);
     this.shotGraphics.lineBetween(
       shot.tower.worldX, shot.tower.worldY,
@@ -420,6 +445,13 @@ export class GameScene extends Phaser.Scene {
     this.overlayShown = true;
     this.selectedTowerUid = null;
     this.registry.set('selectedTowerUid', null);
+
+    // Play end-game sound
+    if (text === 'GAME OVER') {
+      this.soundManager.playGameOver();
+    } else {
+      this.soundManager.playVictory();
+    }
     const { width, height } = this.cameras.main;
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6);
     this.add.text(width / 2, height * 0.42, text, {
