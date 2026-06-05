@@ -236,8 +236,8 @@ export class GameScene extends Phaser.Scene {
       .setInteractive()
       .on('pointerdown', () => this.startNextWave());
 
-    // ── 8. Kick off first wave immediately ───────────────────────────────────
-    this.startNextWave();
+    // ── 8. First wave starts when player clicks "Start Wave" ────────────────
+    // No auto-start — player places towers first, then clicks the button
 
     // ── 9. Launch UIScene ─────────────────────────────────────────────────────
     if (!this.scene.isActive(SCENE_KEYS.UI)) {
