@@ -18,6 +18,10 @@ export interface TowerDefinition {
   range: number;
   /** Attacks per second. */
   fireRate: number;
+  /** Critical hit chance (0 to 1) */
+  critRate: number;
+  /** Critical hit damage multiplier */
+  critDamage: number;
   /** Hex colour used for the tower's rendered circle. */
   color: number;
   /** Sprite / collision circle radius in pixels. */
@@ -32,6 +36,8 @@ export const TOWER_DEFINITIONS: Record<TowerArchetype, TowerDefinition> = {
     damage: 20,
     range: 160,
     fireRate: 1.5,
+    critRate: 0.10,
+    critDamage: 1.5,
     color: 0x3b82f6,
     radius: 14,
   },
@@ -42,6 +48,8 @@ export const TOWER_DEFINITIONS: Record<TowerArchetype, TowerDefinition> = {
     damage: 8,
     range: 120,
     fireRate: 4.0,
+    critRate: 0.20,
+    critDamage: 2.0,
     color: 0x22c55e,
     radius: 12,
   },
@@ -52,6 +60,8 @@ export const TOWER_DEFINITIONS: Record<TowerArchetype, TowerDefinition> = {
     damage: 80,
     range: 200,
     fireRate: 0.5,
+    critRate: 0.05,
+    critDamage: 3.0,
     color: 0xeab308,
     radius: 16,
   },

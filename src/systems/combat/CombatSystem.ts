@@ -12,6 +12,10 @@ export interface ShotEvent {
   killed: boolean;
   /** Gold earned from this shot (0 if not killed) */
   goldEarned: number;
+  /** Actual damage dealt (after crit multiplier) */
+  damageDealt: number;
+  /** Whether this shot was a critical hit */
+  wasCrit: boolean;
 }
 
 export class CombatSystem {
@@ -62,6 +66,8 @@ export class CombatSystem {
         target,
         killed: result.killed,
         goldEarned: result.goldEarned,
+        damageDealt: result.damageDealt,
+        wasCrit: result.wasCrit,
       });
 
       // Step 4c: reset cooldown

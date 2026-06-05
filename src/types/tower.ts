@@ -10,6 +10,10 @@ export interface TowerDefinition {
   range: number;
   /** Shots per second */
   fireRate: number;
+  /** Critical hit chance (0 to 1) */
+  critRate: number;
+  /** Critical hit damage multiplier */
+  critDamage: number;
   color: number;
   radius: number;
 }
