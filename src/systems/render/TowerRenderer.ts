@@ -30,6 +30,19 @@ export class TowerRenderer {
       } else if (tower.archetype === 'heavy') {
         this.drawPentagon(graphics, x, y, radius, color);
       }
+
+      // Draw upgrade level dots (white dots, one per level beyond 1)
+      if (tower.level > 1) {
+        const dotCount = tower.level - 1;
+        const dotRadius = 2;
+        const spacing = 4;
+        const dotY = y - radius - 6;
+        for (let i = 0; i < dotCount; i++) {
+          const dotX = x + (i - (dotCount - 1) / 2) * spacing;
+          graphics.fillStyle(0xffffff, 0.8);
+          graphics.fillCircle(dotX, dotY, dotRadius);
+        }
+      }
     }
   }
 

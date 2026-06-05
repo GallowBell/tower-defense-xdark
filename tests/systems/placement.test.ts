@@ -316,6 +316,7 @@ function makeTower(uid: string, gridX: number, gridY: number): TowerState {
     worldX: 0,
     worldY: 0,
     cooldown: 0,
+    level: 1,
     definition: {
       id: 'basic',
       displayName: 'Archer',
