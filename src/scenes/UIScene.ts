@@ -7,6 +7,7 @@ export class UIScene extends Phaser.Scene {
   private goldText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
+  private stateText!: Phaser.GameObjects.Text;
 
   constructor() {
     super(SCENE_KEYS.UI);
@@ -30,6 +31,7 @@ export class UIScene extends Phaser.Scene {
     this.goldText = this.add.text(32, 16, `Gold: ${store.gold}`, textStyle);
     this.livesText = this.add.text(220, 16, `Lives: ${store.lives}`, textStyle);
     this.waveText = this.add.text(420, 16, `Wave: ${store.wave}/${store.totalWaves}`, textStyle);
+    this.stateText = this.add.text(900, 16, `State: ${store.gameState}`, textStyle);
   }
 
   update(): void {
@@ -40,5 +42,6 @@ export class UIScene extends Phaser.Scene {
     this.goldText.setText(`Gold: ${s.gold}`);
     this.livesText.setText(`Lives: ${s.lives}`);
     this.waveText.setText(`Wave: ${s.wave}/${s.totalWaves}`);
+    this.stateText.setText('State: ' + s.gameState);
   }
 }
