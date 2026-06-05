@@ -15,6 +15,9 @@ import type { EnemyState } from '../types/enemy';
 import type { TowerArchetype } from '../types/tower';
 import type { Vec2 } from '../types/game';
 import { worldToGrid, tileRect, getTileType, waypointsToWorld } from '../utils/grid';
+import { TowerRenderer } from '../systems/render/TowerRenderer';
+import { EnemyRenderer } from '../systems/render/EnemyRenderer';
+import { ProjectileSystem } from '../systems/render/ProjectileSystem';
 
 export class GameScene extends Phaser.Scene {
   private store!: GameStateStore;
@@ -30,8 +33,17 @@ export class GameScene extends Phaser.Scene {
   private enemyFactory!: EnemyFactory;
   private worldWaypoints!: Vec2[];
   private enemies: EnemyState[] = [];
-  private enemyGraphics!: Map<string, Phaser.GameObjects.Arc>;
+  private enemyRenderer!: EnemyRenderer;
+  private enemyObjects!: Map<string, Phaser.GameObjects.GameObject>;
   private waveSpawnComplete: boolean = false;
+
+  // ── Tower visual fields ───────────────────────────────────────────────────
+  private towerRenderer!: TowerRenderer;
+  private towerGraphics!: Phaser.GameObjects.Graphics;
+
+  // ── Projectile visual fields ──────────────────────────────────────────────
+  private projectileSystem!: ProjectileSystem;
+  private projectileGraphics!: Phaser.GameObjects.Graphics;
 
   // ── Combat fields ─────────────────────────────────────────────────────────
   private combatSystem!: CombatSystem;
@@ -64,12 +76,19 @@ export class GameScene extends Phaser.Scene {
     this.enemyFactory = new EnemyFactory();
     this.waveSystem = new WaveSystem(this.enemyFactory);
     this.worldWaypoints = waypointsToWorld(this.map);
-    this.enemyGraphics = new Map();
+    this.enemyRenderer = new EnemyRenderer();
+    this.enemyObjects = new Map();
 
     // ── 4b. Combat system ─────────────────────────────────────────────────────
     this.combatSystem = new CombatSystem();
     this.shotGraphics = this.add.graphics();
     this.hpGraphics = this.add.graphics();
+
+    // ── 4c. Visual systems ───────────────────────────────────────────────────
+    this.towerRenderer = new TowerRenderer();
+    this.projectileSystem = new ProjectileSystem();
+    this.towerGraphics = this.add.graphics();
+    this.projectileGraphics = this.add.graphics();
 
     // ── 5. Draw tile grid ─────────────────────────────────────────────────────
     for (let row = 0; row < this.map.rows; row++) {
@@ -108,9 +127,7 @@ export class GameScene extends Phaser.Scene {
       if (result.success) {
         this.store.addTower(result.tower!);
         this.store.spendGold(result.goldSpent!);
-
-        const tower = result.tower!;
-        this.add.circle(tower.worldX, tower.worldY, tower.definition.radius, tower.definition.color);
+        // Towers are now drawn by TowerRenderer via drawHpBars()
       }
     });
 
@@ -159,8 +176,8 @@ export class GameScene extends Phaser.Scene {
       this.waveSystem.update(dt, spawnPos, {
         onSpawn: (enemy) => {
           this.enemies.push(enemy);
-          const circle = this.add.circle(enemy.x, enemy.y, enemy.radius, enemy.color);
-          this.enemyGraphics.set(enemy.uid, circle);
+          const obj = this.enemyRenderer.createObject(this, enemy);
+          this.enemyObjects.set(enemy.uid, obj);
         },
         onWaveSpawnComplete: () => {
           this.waveSpawnComplete = true;
@@ -176,8 +193,8 @@ export class GameScene extends Phaser.Scene {
           enemy.dead = true; // mark to avoid double-counting
           this.store.loseLife();
           // Remove graphics
-          const g = this.enemyGraphics.get(enemy.uid);
-          if (g) { g.destroy(); this.enemyGraphics.delete(enemy.uid); }
+          const g = this.enemyObjects.get(enemy.uid);
+          if (g) { g.destroy(); this.enemyObjects.delete(enemy.uid); }
         }
         continue;
       }
@@ -185,15 +202,17 @@ export class GameScene extends Phaser.Scene {
       this.pathSystem.advance(enemy, this.worldWaypoints, dt);
 
       // Update graphic position
-      const g = this.enemyGraphics.get(enemy.uid);
-      if (g) { g.setPosition(enemy.x, enemy.y); }
+      const g = this.enemyObjects.get(enemy.uid);
+      if (g && 'setPosition' in g) {
+        (g as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
+      }
 
       // Check if just leaked after advance
       if (enemy.leaked) {
         enemy.dead = true;
         this.store.loseLife();
-        const gr = this.enemyGraphics.get(enemy.uid);
-        if (gr) { gr.destroy(); this.enemyGraphics.delete(enemy.uid); }
+        const gr = this.enemyObjects.get(enemy.uid);
+        if (gr) { gr.destroy(); this.enemyObjects.delete(enemy.uid); }
       }
     }
 
@@ -202,10 +221,30 @@ export class GameScene extends Phaser.Scene {
       const shots = this.combatSystem.tick(this.store.towers, this.enemies, dt);
       for (const shot of shots) {
         this.handleShot(shot);
+        // Fire projectile visuals
+        if (shot.target && !shot.target.dead) {
+          this.projectileSystem.fire(
+            shot.tower.worldX,
+            shot.tower.worldY,
+            { uid: shot.target.uid, x: shot.target.x, y: shot.target.y },
+            shot.tower.definition.color,
+          );
+        }
       }
     }
 
-    // ── Draw HP bars ─────────────────────────────────────────────────────────
+    // ── Projectile update ─────────────────────────────────────────────────────
+    this.projectileSystem.update(
+      dt,
+      this.enemies.map((e) => ({
+        uid: e.uid,
+        x: e.x,
+        y: e.y,
+        dead: e.dead,
+      })),
+    );
+
+    // ── Draw HP bars, towers, and projectiles ────────────────────────────────
     this.drawHpBars();
 
     // ── Check wave cleared: spawn done AND all enemies dead/leaked ────────────
@@ -232,8 +271,8 @@ export class GameScene extends Phaser.Scene {
     if (shot.killed) {
       this.store.earnGold(shot.goldEarned);
       // Remove enemy graphics
-      const g = this.enemyGraphics.get(shot.target.uid);
-      if (g) { g.destroy(); this.enemyGraphics.delete(shot.target.uid); }
+      const g = this.enemyObjects.get(shot.target.uid);
+      if (g) { g.destroy(); this.enemyObjects.delete(shot.target.uid); }
     }
 
     // 2. Draw a brief shot line from tower to enemy
@@ -247,9 +286,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawHpBars(): void {
-    // Clear both graphics objects at start of each frame
+    // Clear ALL graphics objects at start of each frame
     this.shotGraphics.clear();
     this.hpGraphics.clear();
+    this.towerGraphics.clear();
+    this.projectileGraphics.clear();
+
+    // Draw towers
+    this.towerRenderer.draw(this.towerGraphics, this.store.towers);
+
+    // Draw projectiles
+    for (const proj of this.projectileSystem.getAlive()) {
+      // Interpolate projectile position
+      const px = proj.startX + (proj.targetX - proj.startX) * proj.progress;
+      const py = proj.startY + (proj.targetY - proj.startY) * proj.progress;
+      this.projectileGraphics.fillStyle(proj.color, 1);
+      this.projectileGraphics.fillCircle(px, py, 3);
+    }
 
     // For each alive enemy, draw an HP bar above it
     for (const enemy of this.enemies) {
