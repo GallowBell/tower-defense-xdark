@@ -97,8 +97,8 @@ export class UIScene extends Phaser.Scene {
         store: GameStateStore;
         upgradeSystem: {
           getUpgradeCost(tower: { definition: { cost: number }; level: number }): number;
-          getProjectedStats(tower: any): { nextDamage: number; nextRange: number; nextFireRate: number; cost: number };
-          canUpgrade(tower: any, gold: number): boolean;
+          getProjectedStats(tower: { definition: { cost: number; damage: number; range: number; fireRate: number }; level: number }): { nextDamage: number; nextRange: number; nextFireRate: number; cost: number };
+          canUpgrade(tower: { definition: { cost: number }; level: number }, gold: number): boolean;
         };
       };
 

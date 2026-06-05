@@ -280,8 +280,7 @@ describe('WaveSystem', () => {
     ws.startWave(SIMPLE_WAVE);
     // Exhaust the wave fully
     const spawned: EnemyState[] = [];
-    let completeCalled = 0;
-    const cb = { onSpawn: (e: EnemyState) => { spawned.push(e); }, onWaveSpawnComplete: () => { completeCalled++; } };
+    const cb = { onSpawn: (e: EnemyState) => { spawned.push(e); }, onWaveSpawnComplete: () => { /* no-op */ } };
     ws.update(0, spawnPos, cb);
     ws.update(2.0, spawnPos, cb);
     expect(ws.isSpawnComplete).toBe(true);
