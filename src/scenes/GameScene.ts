@@ -19,6 +19,7 @@ import { TowerRenderer } from '../systems/render/TowerRenderer';
 import { EnemyRenderer } from '../systems/render/EnemyRenderer';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
+import { SkinManager } from '../systems/skins/SkinManager';
 
 export class GameScene extends Phaser.Scene {
   private store!: GameStateStore;
@@ -58,6 +59,9 @@ export class GameScene extends Phaser.Scene {
 
   // ── Overlay guard ─────────────────────────────────────────────────────────
   private overlayShown = false;
+
+  // ── Skin manager ──────────────────────────────────────────────────────────
+  private skinManager!: SkinManager;
 
   constructor() {
     super(SCENE_KEYS.GAME);
@@ -102,6 +106,10 @@ export class GameScene extends Phaser.Scene {
     this.upgradeSystem = new TowerUpgradeSystem();
     this.selectedTowerUid = null;
     this.registry.set('selectedTowerUid', null);
+
+    // ── 4e. Skin system ───────────────────────────────────────────────────────
+    const selectedTheme = this.registry.get('selectedTheme') as string | null;
+    this.skinManager = new SkinManager(selectedTheme ?? undefined);
 
     // ── 5. Draw tile grid ─────────────────────────────────────────────────────
     for (let row = 0; row < this.map.rows; row++) {
@@ -262,7 +270,8 @@ export class GameScene extends Phaser.Scene {
       this.waveSystem.update(dt, spawnPos, {
         onSpawn: (enemy) => {
           this.enemies.push(enemy);
-          const obj = this.enemyRenderer.createObject(this, enemy);
+          const enemyColor = this.skinManager.getEnemyColors()[enemy.archetype as keyof ReturnType<typeof this.skinManager.getEnemyColors>] ?? enemy.color;
+          const obj = this.enemyRenderer.createObject(this, enemy, enemyColor);
           this.enemyObjects.set(enemy.uid, obj);
         },
         onWaveSpawnComplete: () => {
@@ -366,7 +375,7 @@ export class GameScene extends Phaser.Scene {
     this.rangeIndicator.clear();
 
     // Draw towers
-    this.towerRenderer.draw(this.towerGraphics, this.store.towers);
+    this.towerRenderer.draw(this.towerGraphics, this.store.towers, this.skinManager.getTowerColors());
 
     // Draw selection ring around selected tower
     if (this.selectedTowerUid) {

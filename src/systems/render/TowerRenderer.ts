@@ -5,23 +5,22 @@ import type { TowerState } from '../../types/tower';
  * Draws tower visuals using Phaser Graphics, NOT individual game objects.
  * Each tower archetype gets a distinct shape drawn on a shared Graphics object.
  *
- * Archer (basic):   Diamond (rotated square) — draw a 4-point diamond.
- *                    Points: (x, y-r), (x+r, y), (x, y+r), (x-r, y)
- *                    Fill: definition.color
+ * Archer (basic):   Diamond (rotated square)
  * Gunner (fast):    Triangle pointing up
- *                    Points: (x, y-r), (x+r*0.866, y+r*0.5), (x-r*0.866, y+r*0.5)
- *                    Fill: definition.color
  * Cannon (heavy):   Pentagon (5-sided polygon)
- *                    Points at 5 evenly-spaced angles starting from -PI/2 (top)
- *                    Fill: definition.color
  *
- * All shapes get a 1px white (0xffffff, 0.3 alpha) stroke outline.
+ * Supports optional color overrides for skin theming.
  */
 export class TowerRenderer {
-  draw(graphics: Phaser.GameObjects.Graphics, towers: TowerState[]): void {
+  draw(
+    graphics: Phaser.GameObjects.Graphics,
+    towers: TowerState[],
+    colorOverrides?: Record<string, number>,
+  ): void {
     for (const tower of towers) {
       const { worldX: x, worldY: y, definition } = tower;
-      const { radius, color } = definition;
+      const color = colorOverrides?.[tower.archetype] ?? definition.color;
+      const radius = definition.radius;
 
       if (tower.archetype === 'basic') {
         this.drawDiamond(graphics, x, y, radius, color);
@@ -48,10 +47,7 @@ export class TowerRenderer {
 
   private drawDiamond(
     graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    radius: number,
-    color: number,
+    x: number, y: number, radius: number, color: number,
   ): void {
     graphics.fillStyle(color, 1);
     graphics.lineStyle(1, 0xffffff, 0.3);
@@ -67,12 +63,9 @@ export class TowerRenderer {
 
   private drawTriangle(
     graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    radius: number,
-    color: number,
+    x: number, y: number, radius: number, color: number,
   ): void {
-    const h = radius * 0.866; // sqrt(3)/2 * radius
+    const h = radius * 0.866;
     graphics.fillStyle(color, 1);
     graphics.lineStyle(1, 0xffffff, 0.3);
     graphics.beginPath();
@@ -86,10 +79,7 @@ export class TowerRenderer {
 
   private drawPentagon(
     graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    radius: number,
-    color: number,
+    x: number, y: number, radius: number, color: number,
   ): void {
     graphics.fillStyle(color, 1);
     graphics.lineStyle(1, 0xffffff, 0.3);
