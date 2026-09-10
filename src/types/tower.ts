@@ -14,6 +14,8 @@ export interface TowerDefinition {
   critRate: number;
   /** Critical hit damage multiplier */
   critDamage: number;
+  /** Blast radius in pixels. 0 means the tower only hits its target. */
+  splashRadius: number;
   color: number;
   radius: number;
 }
@@ -31,5 +33,11 @@ export interface TowerState {
   level: number;
   /** Total gold sunk into this tower: purchase price plus every upgrade paid for. */
   investedGold: number;
+  /**
+   * The archetype's level-1 stats, never mutated. Upgrades are always derived
+   * from this, so the curve cannot compound on its own output.
+   */
+  baseDefinition: TowerDefinition;
+  /** Current stats: baseDefinition adjusted for the tower's level. */
   definition: TowerDefinition;
 }

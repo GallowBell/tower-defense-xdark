@@ -318,6 +318,19 @@ describe('GameStateStore', () => {
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 function makeTower(uid: string, gridX: number, gridY: number): TowerState {
+  const definition = {
+    id: 'basic' as const,
+    displayName: 'Archer',
+    cost: 100,
+    damage: 20,
+    range: 160,
+    fireRate: 1.5,
+    critRate: 0.1,
+    critDamage: 1.5,
+    splashRadius: 0,
+    color: 0x3b82f6,
+    radius: 14,
+  };
   return {
     uid,
     archetype: 'basic',
@@ -328,17 +341,7 @@ function makeTower(uid: string, gridX: number, gridY: number): TowerState {
     cooldown: 0,
     level: 1,
     investedGold: 100,
-    definition: {
-      id: 'basic',
-      displayName: 'Archer',
-      cost: 100,
-      damage: 20,
-      range: 160,
-      fireRate: 1.5,
-      critRate: 0.1,
-      critDamage: 1.5,
-      color: 0x3b82f6,
-      radius: 14,
-    },
+    baseDefinition: definition,
+    definition,
   };
 }

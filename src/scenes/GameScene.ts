@@ -250,7 +250,8 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-U', () => {
       if (this.isPaused || !this.selectedTowerUid) return;
       const tower = this.store.towers.find(t => t.uid === this.selectedTowerUid);
-      if (!tower) return;
+      // canUpgrade() covers both affordability and the max-level cap.
+      if (!tower || !this.upgradeSystem.canUpgrade(tower, this.store.gold)) return;
       // Read the price BEFORE upgrading: afterwards getUpgradeCost() quotes the
       // next level's price, which is not what the player was shown.
       const cost = this.upgradeSystem.getUpgradeCost(tower);
@@ -455,23 +456,36 @@ export class GameScene extends Phaser.Scene {
     this.store.loseLife();
     this.soundManager.playEnemyDeath();
     this.particleManager.enemyLeaked(enemy.x, enemy.y);
-    const g = this.enemyObjects.get(enemy.uid);
+    this.retireEnemySprite(enemy.uid);
+  }
+
+  /** Destroy an enemy's display object and forget it. Safe to call twice. */
+  private retireEnemySprite(uid: string): void {
+    const g = this.enemyObjects.get(uid);
     if (g) {
       g.destroy();
-      this.enemyObjects.delete(enemy.uid);
+      this.enemyObjects.delete(uid);
     }
   }
 
   // ── Combat helpers ────────────────────────────────────────────────────────
 
   private handleShot(shot: ShotEvent): void {
-    if (shot.killed) {
+    // Splash kills pay out too, so gold is no longer tied to the primary target.
+    if (shot.goldEarned > 0) {
       this.store.earnGold(shot.goldEarned);
       this.soundManager.playGoldEarned();
+    }
+
+    if (shot.killed) {
       this.soundManager.playEnemyDeath();
       this.particleManager.enemyDeath(shot.target);
-      const g = this.enemyObjects.get(shot.target.uid);
-      if (g) { g.destroy(); this.enemyObjects.delete(shot.target.uid); }
+      this.retireEnemySprite(shot.target.uid);
+    }
+
+    for (const victim of shot.splashKills) {
+      this.particleManager.enemyDeath(victim);
+      this.retireEnemySprite(victim.uid);
     }
 
     this.soundManager.playShoot();
@@ -481,6 +495,13 @@ export class GameScene extends Phaser.Scene {
       shot.tower.worldX, shot.tower.worldY,
       shot.target.x, shot.target.y,
     );
+
+    // Blast ring, so the player can see what the splash actually covered.
+    const { splashRadius } = shot.tower.definition;
+    if (splashRadius > 0) {
+      this.shotGraphics.lineStyle(2, shot.tower.definition.color, 0.55);
+      this.shotGraphics.strokeCircle(shot.target.x, shot.target.y, splashRadius);
+    }
 
     // Floating damage number
     const dmgStr = shot.wasCrit ? `CRIT! ${shot.damageDealt}` : `${shot.damageDealt}`;

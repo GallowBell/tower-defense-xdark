@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-import type { TowerState } from '../../src/types/tower';
+import type { TowerDefinition, TowerState } from '../../src/types/tower';
 import type { EnemyState, EnemyId } from '../../src/types/enemy';
 import { TargetingSystem } from '../../src/systems/combat/TargetingSystem';
 import { DamageSystem } from '../../src/systems/combat/DamageSystem';
@@ -8,7 +8,23 @@ import { CombatSystem } from '../../src/systems/combat/CombatSystem';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const DEFAULT_TOWER_DEF: TowerDefinition = {
+  id: 'basic',
+  displayName: 'Archer',
+  cost: 100,
+  damage: 20,
+  range: 200,
+  fireRate: 1.5,
+  critRate: 0.1,
+  critDamage: 1.5,
+  splashRadius: 0,
+  color: 0x3b82f6,
+  radius: 14,
+};
+
 function makeTower(overrides?: Partial<TowerState>): TowerState {
+  // baseDefinition follows a `definition` override so the two never disagree.
+  const definition = overrides?.definition ?? DEFAULT_TOWER_DEF;
   return {
     uid: 'tower_0',
     archetype: 'basic',
@@ -19,18 +35,8 @@ function makeTower(overrides?: Partial<TowerState>): TowerState {
     cooldown: 0,
     level: 1,
     investedGold: 100,
-    definition: {
-      id: 'basic',
-      displayName: 'Archer',
-      cost: 100,
-      damage: 20,
-      range: 200,
-      fireRate: 1.5,
-      critRate: 0.1,
-      critDamage: 1.5,
-      color: 0x3b82f6,
-      radius: 14,
-    },
+    baseDefinition: definition,
+    definition,
     ...overrides,
   };
 }
@@ -43,6 +49,7 @@ function makeEnemy(overrides?: Partial<EnemyState>): EnemyState {
     maxHp: 80,
     speed: 80,
     reward: 10,
+    armor: 0,
     waypointIndex: 0,
     x: 100,
     y: 200,
@@ -162,6 +169,13 @@ describe('DamageSystem', () => {
 
   beforeEach(() => {
     ds = new DamageSystem();
+    // Never crit by default. Without this the exact-damage assertions below
+    // roll a live 10% crit chance and the file fails ~2 runs in 5.
+    vi.spyOn(Math, 'random').mockReturnValue(0.99);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   // ── 1. Reduces enemy HP by tower damage ──────────────────────────────────
@@ -387,5 +401,239 @@ describe('CombatSystem', () => {
     const enemy = makeEnemy({ x: 50, y: 0 });
     const events = cs.tick([], [enemy], 0.016);
     expect(events).toHaveLength(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DamageSystem — armor
+// ═════════════════════════════════════════════════════════════════════════════
+describe('DamageSystem armor', () => {
+  let ds: DamageSystem;
+
+  beforeEach(() => {
+    ds = new DamageSystem();
+    vi.spyOn(Math, 'random').mockReturnValue(0.99); // never crit
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('subtracts armor from every hit', () => {
+    const tower = makeTower(); // damage = 20
+    const enemy = makeEnemy({ hp: 80, armor: 6 });
+
+    const result = ds.applyHit(tower, enemy);
+
+    expect(result.damageDealt).toBe(14);
+    expect(enemy.hp).toBe(66);
+  });
+
+  it('always lands at least 1 damage, however heavy the armor', () => {
+    const tower = makeTower(); // damage = 20
+    const enemy = makeEnemy({ hp: 80, armor: 500 });
+
+    const result = ds.applyHit(tower, enemy);
+
+    expect(result.damageDealt).toBe(1);
+    expect(enemy.hp).toBe(79);
+  });
+
+  it('applies armor after the crit multiplier, so crits still punch through', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0); // force a crit
+    const tower = makeTower(); // damage 20, critDamage 1.5 → 30 raw
+    const enemy = makeEnemy({ hp: 80, armor: 6 });
+
+    const result = ds.applyHit(tower, enemy);
+
+    expect(result.wasCrit).toBe(true);
+    expect(result.damageDealt).toBe(24); // 30 - 6, not floor((20 - 6) * 1.5)
+  });
+
+  it('blunts a Gunner against armor far more than a Cannon', () => {
+    // The whole point of armor: it gives each tower an enemy.
+    const gunner = makeTower({ definition: { ...DEFAULT_TOWER_DEF, damage: 8 } });
+    const cannon = makeTower({ definition: { ...DEFAULT_TOWER_DEF, damage: 80 } });
+    const brute = () => makeEnemy({ hp: 300, armor: 6 });
+
+    const gunnerHit = ds.applyHit(gunner, brute());
+    const cannonHit = ds.applyHit(cannon, brute());
+
+    expect(gunnerHit.damageDealt).toBe(2);  // 75% of the pellet absorbed
+    expect(cannonHit.damageDealt).toBe(74); // barely noticed
+  });
+
+  it('leaves unarmored enemies taking full damage', () => {
+    const tower = makeTower(); // damage = 20
+    const enemy = makeEnemy({ hp: 80, armor: 0 });
+
+    expect(ds.applyHit(tower, enemy).damageDealt).toBe(20);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DamageSystem — splash
+// ═════════════════════════════════════════════════════════════════════════════
+describe('DamageSystem splash', () => {
+  let ds: DamageSystem;
+
+  /** A tower with a 60px blast radius, like the Cannon. */
+  function splashTower(damage = 20): TowerState {
+    return makeTower({ definition: { ...DEFAULT_TOWER_DEF, damage, splashRadius: 60 } });
+  }
+
+  beforeEach(() => {
+    ds = new DamageSystem();
+    vi.spyOn(Math, 'random').mockReturnValue(0.99); // never crit
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not splash when splashRadius is 0', () => {
+    const tower = makeTower(); // splashRadius 0
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
+    const neighbour = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 10, y: 0, hp: 80 });
+
+    const result = ds.applyHit(tower, primary, [primary, neighbour]);
+
+    expect(result.splashHits).toHaveLength(0);
+    expect(neighbour.hp).toBe(80);
+  });
+
+  it('damages every live enemy inside the blast radius', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
+    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 50, y: 0, hp: 80 });
+    const alsoNear = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 0, y: 30, hp: 80 });
+
+    const result = ds.applyHit(splashTower(), primary, [primary, near, alsoNear]);
+
+    expect(result.splashHits).toHaveLength(2);
+    expect(near.hp).toBe(60);
+    expect(alsoNear.hp).toBe(60);
+  });
+
+  it('spares enemies beyond the blast radius', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
+    const far = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 61, y: 0, hp: 80 });
+
+    const result = ds.applyHit(splashTower(), primary, [primary, far]);
+
+    expect(result.splashHits).toHaveLength(0);
+    expect(far.hp).toBe(80);
+  });
+
+  it('never counts the primary target as its own splash victim', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 80 });
+
+    const result = ds.applyHit(splashTower(), primary, [primary]);
+
+    expect(result.splashHits).toHaveLength(0);
+    expect(primary.hp).toBe(60); // hit exactly once
+  });
+
+  it('skips enemies that are already dead or leaked', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
+    const corpse = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 10, y: 0, hp: 0, dead: true });
+    const escaped = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 10, y: 0, hp: 80, leaked: true });
+
+    const result = ds.applyHit(splashTower(), primary, [primary, corpse, escaped]);
+
+    expect(result.splashHits).toHaveLength(0);
+    expect(escaped.hp).toBe(80);
+  });
+
+  it('pays out the reward for every enemy the blast kills', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 10, reward: 10 });
+    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 10, reward: 8 });
+    const alsoNear = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 40, y: 0, hp: 10, reward: 25 });
+
+    const result = ds.applyHit(splashTower(), primary, [primary, near, alsoNear]);
+
+    expect(result.killed).toBe(true);
+    expect(result.splashKills).toHaveLength(2);
+    expect(result.goldEarned).toBe(43); // 10 + 8 + 25
+  });
+
+  it('pays out splash kills even when the primary target survives', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 500, reward: 10 });
+    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 10, reward: 8 });
+
+    const result = ds.applyHit(splashTower(), primary, [primary, near]);
+
+    expect(result.killed).toBe(false);
+    expect(result.splashKills).toEqual([near]);
+    expect(result.goldEarned).toBe(8);
+  });
+
+  it('applies each victim armor separately inside the blast', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 80, armor: 0 });
+    const armoured = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 80, armor: 6 });
+
+    const result = ds.applyHit(splashTower(), primary, [primary, armoured]);
+
+    expect(result.damageDealt).toBe(20);
+    expect(armoured.hp).toBe(66); // 20 - 6
+  });
+
+  it('marks blast victims dead so targeting drops them', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 10 });
+    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 10 });
+
+    ds.applyHit(splashTower(), primary, [primary, near]);
+
+    expect(near.dead).toBe(true);
+  });
+
+  it('defaults to no splash when no enemy list is passed', () => {
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
+
+    expect(ds.applyHit(splashTower(), primary).splashHits).toHaveLength(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CombatSystem — splash propagation
+// ═════════════════════════════════════════════════════════════════════════════
+describe('CombatSystem splash', () => {
+  let cs: CombatSystem;
+
+  beforeEach(() => {
+    cs = new CombatSystem();
+    vi.spyOn(Math, 'random').mockReturnValue(0.99); // never crit
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reports blast victims on the ShotEvent', () => {
+    const tower = makeTower({
+      worldX: 0,
+      worldY: 0,
+      cooldown: 0,
+      definition: { ...DEFAULT_TOWER_DEF, splashRadius: 60 },
+    });
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 50, y: 0, hp: 10, reward: 10 });
+    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 60, y: 0, hp: 10, reward: 8 });
+
+    const events = cs.tick([tower], [primary, near], 0.016);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].splashKills).toEqual([near]);
+    expect(events[0].goldEarned).toBe(18);
+  });
+
+  it('reports no blast victims for a single-target tower', () => {
+    const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0 }); // splashRadius 0
+    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 50, y: 0 });
+    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 60, y: 0, hp: 80 });
+
+    const events = cs.tick([tower], [primary, near], 0.016);
+
+    expect(events[0].splashHits).toHaveLength(0);
+    expect(events[0].splashKills).toHaveLength(0);
+    expect(near.hp).toBe(80);
   });
 });

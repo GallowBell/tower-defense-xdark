@@ -10,6 +10,8 @@ export interface EnemyDefinition {
   hp: number;
   speed: number;
   reward: number;
+  /** Flat damage subtracted from every hit. A hit always deals at least 1. */
+  armor: number;
   radius: number;
   /** Phaser hex color, e.g. 0xef4444 */
   color: number;
@@ -22,6 +24,8 @@ export interface EnemyState {
   maxHp: number;
   speed: number;
   reward: number;
+  /** Flat damage subtracted from every hit. A hit always deals at least 1. */
+  armor: number;
   waypointIndex: number;
   x: number;
   y: number;

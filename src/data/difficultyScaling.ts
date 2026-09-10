@@ -35,12 +35,25 @@ export const DIFFICULTY = {
   sellRefundRatio: 0.5,
 
   /**
-   * Upgrade cost multiplier (fraction of base cost per level).
+   * Upgrade cost multiplier: an upgrade costs baseCost * ratio * currentLevel.
    */
-  upgradeCostRatio: 0.6,
+  upgradeCostRatio: 0.4,
+
+  /** Highest level a tower can reach. */
+  maxTowerLevel: 4,
 
   /**
-   * Tower kill reward: percentage of tower cost as bonus per kill.
-   * Actually this is per-enemy reward + wave bonus, so no change needed.
+   * Per-level stat growth, applied to a tower's BASE stats:
+   *   stat = base * (1 + rate * (level - 1))
+   *
+   * Damage grows fastest and range slowest, so upgrading concentrates power
+   * without erasing the value of covering more of the map with more towers.
+   * At level 4 that is 2.05x damage, 1.6x fire rate and 1.24x range for a
+   * total outlay of 3.4x the purchase price — roughly the gold efficiency of
+   * simply building more towers, which is the point: upgrading should be a
+   * real choice, not the only move.
    */
+  upgradeDamagePerLevel: 0.35,
+  upgradeFireRatePerLevel: 0.20,
+  upgradeRangePerLevel: 0.08,
 } as const;

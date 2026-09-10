@@ -16,6 +16,10 @@ export interface ShotEvent {
   damageDealt: number;
   /** Whether this shot was a critical hit */
   wasCrit: boolean;
+  /** Enemies other than the target caught in the blast (splash towers only) */
+  splashHits: EnemyState[];
+  /** Splash victims that died from this shot */
+  splashKills: EnemyState[];
 }
 
 export class CombatSystem {
@@ -35,7 +39,8 @@ export class CombatSystem {
    *   2. If cooldown > 0: skip (tower still reloading)
    *   3. Find target via TargetingSystem.findTarget()
    *   4. If target found:
-   *      a. Apply damage via DamageSystem.applyHit()
+   *      a. Apply damage via DamageSystem.applyHit(), passing the enemy list
+   *         so splash towers can catch everything around the target
    *      b. Emit a ShotEvent (push to returned array)
    *      c. Reset tower.cooldown = 1 / tower.definition.fireRate
    *   5. If no target: do nothing (cooldown stays 0, ready to fire)
@@ -57,8 +62,8 @@ export class CombatSystem {
       const target = this.targeting.findTarget(tower, enemies);
       if (target === null) continue;
 
-      // Step 4a: apply damage
-      const result = this.damage.applyHit(tower, target);
+      // Step 4a: apply damage — the full enemy list feeds splash towers
+      const result = this.damage.applyHit(tower, target, enemies);
 
       // Step 4b: emit ShotEvent
       events.push({
@@ -68,6 +73,8 @@ export class CombatSystem {
         goldEarned: result.goldEarned,
         damageDealt: result.damageDealt,
         wasCrit: result.wasCrit,
+        splashHits: result.splashHits,
+        splashKills: result.splashKills,
       });
 
       // Step 4c: reset cooldown

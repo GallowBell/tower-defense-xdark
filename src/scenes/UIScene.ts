@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 
 import { GAME_COLORS, SCENE_KEYS } from '../app/constants';
 import { GameStateStore } from '../systems/game-state/GameStateStore';
+import type { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 
 export class UIScene extends Phaser.Scene {
   private goldText!: Phaser.GameObjects.Text;
@@ -101,35 +102,41 @@ export class UIScene extends Phaser.Scene {
     if (selectedUid) {
       const gs = this.scene.get(SCENE_KEYS.GAME) as unknown as {
         store: GameStateStore;
-        upgradeSystem: {
-          getUpgradeCost(tower: { definition: { cost: number }; level: number }): number;
-          getProjectedStats(tower: { definition: { cost: number; damage: number; range: number; fireRate: number }; level: number }): { nextDamage: number; nextRange: number; nextFireRate: number; cost: number };
-          canUpgrade(tower: { definition: { cost: number }; level: number }, gold: number): boolean;
-        };
+        upgradeSystem: TowerUpgradeSystem;
       };
 
       const selectedTower = gs.store.towers.find(t => t.uid === selectedUid);
       if (selectedTower && gs.upgradeSystem) {
         const upgrades = gs.upgradeSystem;
+        const def = selectedTower.definition;
+        const atMax = upgrades.isMaxLevel(selectedTower);
         const proj = upgrades.getProjectedStats(selectedTower);
         const canAfford = upgrades.canUpgrade(selectedTower, storeRef.gold);
 
         const panelX = 16;
         const panelY = 80;
-        const infoLines = [
-          `${selectedTower.definition.displayName} Lv.${selectedTower.level}`,
-          `DMG: ${selectedTower.definition.damage} → ${proj.nextDamage}`,
-          `RNG: ${selectedTower.definition.range} → ${proj.nextRange}`,
-          `SPD: ${selectedTower.definition.fireRate.toFixed(1)} → ${proj.nextFireRate.toFixed(1)}`,
-          `Upgrade: ${proj.cost}g`,
-        ];
+        const infoLines = atMax
+          ? [
+              `${def.displayName} Lv.${selectedTower.level} — MAX`,
+              `DMG: ${def.damage}`,
+              `RNG: ${def.range}`,
+              `SPD: ${def.fireRate.toFixed(1)}`,
+              `Sell value: ${Math.floor(selectedTower.investedGold * 0.5)}g`,
+            ]
+          : [
+              `${def.displayName} Lv.${selectedTower.level}`,
+              `DMG: ${def.damage} → ${proj.nextDamage}`,
+              `RNG: ${def.range} → ${proj.nextRange}`,
+              `SPD: ${def.fireRate.toFixed(1)} → ${proj.nextFireRate.toFixed(1)}`,
+              `Upgrade [U]: ${proj.cost}g`,
+            ];
 
         infoLines.forEach((line, i) => {
           const t = this.add.text(panelX, panelY + i * 20, line, {
             color: '#f8fafc',
             fontFamily: 'Arial, sans-serif',
             fontSize: '14px',
-            backgroundColor: canAfford ? '#1e3a5f' : '#3a1a1a',
+            backgroundColor: atMax ? '#1f3d2b' : canAfford ? '#1e3a5f' : '#3a1a1a',
             padding: { x: 4, y: 2 },
           });
           this.upgradeTexts.push(t);

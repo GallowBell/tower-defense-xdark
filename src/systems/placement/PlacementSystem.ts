@@ -48,6 +48,7 @@ export class PlacementSystem {
       cooldown: 0,
       level: 1,
       investedGold: def.cost,
+      baseDefinition: def,
       definition: def,
     };
     return { success: true, tower, goldSpent: def.cost };
