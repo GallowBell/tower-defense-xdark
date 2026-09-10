@@ -19,8 +19,18 @@ export class GameStateStore {
   gameState: GameState = 'idle';
   towers: TowerState[] = [];
 
-  spendGold(amount: number): void {
-    this.gold = Math.max(0, this.gold - amount);
+  /**
+   * Deduct `amount` from the player's gold.
+   * Refuses (and leaves gold untouched) when the amount is negative or
+   * unaffordable, so an over-spend surfaces as a failed purchase rather than
+   * silently clamping the balance to zero.
+   *
+   * @returns true when the gold was actually spent.
+   */
+  spendGold(amount: number): boolean {
+    if (amount < 0 || amount > this.gold) return false;
+    this.gold -= amount;
+    return true;
   }
 
   earnGold(amount: number): void {

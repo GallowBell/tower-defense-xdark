@@ -177,14 +177,24 @@ describe('GameStateStore', () => {
 
   // ── spendGold ──────────────────────────────────────────────────────────────
 
-  it('spendGold reduces gold by the given amount', () => {
-    store.spendGold(50);
+  it('spendGold reduces gold by the given amount and reports success', () => {
+    expect(store.spendGold(50)).toBe(true);
     expect(store.gold).toBe(BALANCE.startingGold - 50);
   });
 
-  it('spendGold does not go below 0', () => {
-    store.spendGold(9999);
+  it('spendGold refuses an unaffordable spend and leaves gold untouched', () => {
+    expect(store.spendGold(9999)).toBe(false);
+    expect(store.gold).toBe(BALANCE.startingGold);
+  });
+
+  it('spendGold allows spending the exact remaining balance', () => {
+    expect(store.spendGold(BALANCE.startingGold)).toBe(true);
     expect(store.gold).toBe(0);
+  });
+
+  it('spendGold refuses a negative amount rather than granting gold', () => {
+    expect(store.spendGold(-100)).toBe(false);
+    expect(store.gold).toBe(BALANCE.startingGold);
   });
 
   // ── earnGold ───────────────────────────────────────────────────────────────
@@ -308,6 +318,19 @@ describe('GameStateStore', () => {
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 function makeTower(uid: string, gridX: number, gridY: number): TowerState {
+  const definition = {
+    id: 'basic' as const,
+    displayName: 'Archer',
+    cost: 100,
+    damage: 20,
+    range: 160,
+    fireRate: 1.5,
+    critRate: 0.1,
+    critDamage: 1.5,
+    splashRadius: 0,
+    color: 0x3b82f6,
+    radius: 14,
+  };
   return {
     uid,
     archetype: 'basic',
@@ -317,17 +340,8 @@ function makeTower(uid: string, gridX: number, gridY: number): TowerState {
     worldY: 0,
     cooldown: 0,
     level: 1,
-    definition: {
-      id: 'basic',
-      displayName: 'Archer',
-      cost: 100,
-      damage: 20,
-      range: 160,
-      fireRate: 1.5,
-      critRate: 0.1,
-      critDamage: 1.5,
-      color: 0x3b82f6,
-      radius: 14,
-    },
+    investedGold: 100,
+    baseDefinition: definition,
+    definition,
   };
 }

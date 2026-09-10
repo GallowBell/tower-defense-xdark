@@ -19,6 +19,7 @@ function makeEnemy(overrides: Partial<EnemyState> = {}): EnemyState {
     maxHp: 80,
     speed: 100, // 100 px/s
     reward: 10,
+    armor: 0,
     waypointIndex: 0,
     x: 0,
     y: 0,

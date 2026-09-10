@@ -70,6 +70,16 @@ export class GameScene extends Phaser.Scene {
   private soundManager!: SoundManager;
   private particleManager!: ParticleManager;
 
+  // ── Fixed-timestep simulation ─────────────────────────────────────────────
+  /** Seconds of simulated time per step. The sim only ever advances by this. */
+  private static readonly SIM_STEP = 1 / 60;
+  /** Safety valve so a long frame (tab-out, GC pause) can't spiral. */
+  private static readonly MAX_STEPS_PER_FRAME = 8;
+  private simAccumulator: number = 0;
+
+  /** Tower under the pointer, drawn during the render phase. */
+  private hoveredTowerUid: string | null = null;
+
   // ── QoL: Speed control ────────────────────────────────────────────────────
   private speedMultiplier: number = 1;
   private speedText!: Phaser.GameObjects.Text;
@@ -84,6 +94,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // ── 0. Reset per-run state ────────────────────────────────────────────────
+    // Phaser reuses this Scene instance across scene.restart(), so field
+    // initialisers do NOT re-run. Anything mutable must be reset by hand or it
+    // leaks into the next run (a stale overlayShown froze the board entirely).
+    this.enemies = [];
+    this.overlayShown = false;
+    this.isPaused = false;
+    this.speedMultiplier = 1;
+    this.simAccumulator = 0;
+    this.waveSpawnComplete = false;
+    this.hoveredTowerUid = null;
+    this.pauseOverlayObjs = [];
+
     // ── 1. Store ──────────────────────────────────────────────────────────────
     this.store = new GameStateStore();
     this.registry.set('store', this.store);
@@ -173,9 +196,8 @@ export class GameScene extends Phaser.Scene {
             this.store.gameState, grid.x, grid.y, this.selectedArchetype,
           );
 
-          if (result.success) {
+          if (result.success && this.store.spendGold(result.goldSpent!)) {
             this.store.addTower(result.tower!);
-            this.store.spendGold(result.goldSpent!);
             this.soundManager.playUIClick();
             this.selectedTowerUid = null;
             this.registry.set('selectedTowerUid', null);
@@ -190,7 +212,7 @@ export class GameScene extends Phaser.Scene {
           const dist = Math.sqrt(dx * dx + dy * dy);
 
           if (dist < tower.definition.radius + sellRadius) {
-            const refund = Math.floor(tower.definition.cost * DIFFICULTY.sellRefundRatio);
+            const refund = Math.floor(tower.investedGold * DIFFICULTY.sellRefundRatio);
             this.store.earnGold(refund);
             this.soundManager.playSell();
             this.store.removeTower(tower.uid);
@@ -205,18 +227,17 @@ export class GameScene extends Phaser.Scene {
     });
 
     // ── 6b. Pointer move — range indicator on hover ──────────────────────────
+    // Only records what is hovered — drawing happens in drawScene(), because
+    // the render phase clears this layer every frame.
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      this.rangeIndicator.clear();
       const hoverRadius = 20;
+      this.hoveredTowerUid = null;
       for (const tower of this.store.towers) {
         const dx = pointer.worldX - tower.worldX;
         const dy = pointer.worldY - tower.worldY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < tower.definition.radius + hoverRadius) {
-          this.rangeIndicator.lineStyle(1, 0xffffff, 0.3);
-          this.rangeIndicator.strokeCircle(tower.worldX, tower.worldY, tower.definition.range);
-          this.rangeIndicator.fillStyle(tower.definition.color, 0.08);
-          this.rangeIndicator.fillCircle(tower.worldX, tower.worldY, tower.definition.range);
+          this.hoveredTowerUid = tower.uid;
           break;
         }
       }
@@ -229,9 +250,13 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-U', () => {
       if (this.isPaused || !this.selectedTowerUid) return;
       const tower = this.store.towers.find(t => t.uid === this.selectedTowerUid);
+      // canUpgrade() covers both affordability and the max-level cap.
       if (!tower || !this.upgradeSystem.canUpgrade(tower, this.store.gold)) return;
+      // Read the price BEFORE upgrading: afterwards getUpgradeCost() quotes the
+      // next level's price, which is not what the player was shown.
+      const cost = this.upgradeSystem.getUpgradeCost(tower);
+      if (!this.store.spendGold(cost)) return;
       this.upgradeSystem.applyUpgrade(tower);
-      this.store.spendGold(this.upgradeSystem.getUpgradeCost(tower));
       this.soundManager.playUpgrade();
       this.particleManager.towerUpgrade(tower.worldX, tower.worldY);
       this.registry.set('selectedTowerUid', this.selectedTowerUid);
@@ -313,10 +338,50 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.overlayShown) return;
 
-    const dt = delta / 1000 * this.speedMultiplier;
+    // ── Fixed-timestep simulation ────────────────────────────────────────────
+    // The sim always advances in SIM_STEP slices, so a tower's rate of fire is
+    // independent of frame rate and of the speed multiplier. Scaling a variable
+    // dt instead made 2x speed *harder*: enemies moved twice as fast while
+    // CombatSystem.tick() still fired each tower at most once per call.
+    this.clearFrameGraphics();
 
+    if (!this.isPaused) {
+      // Cap the frame delta so a tab-out or GC pause doesn't bank a huge backlog.
+      this.simAccumulator += Math.min(delta / 1000, 0.25) * this.speedMultiplier;
+
+      let steps = 0;
+      while (
+        this.simAccumulator >= GameScene.SIM_STEP &&
+        steps < GameScene.MAX_STEPS_PER_FRAME
+      ) {
+        this.stepSimulation(GameScene.SIM_STEP);
+        this.simAccumulator -= GameScene.SIM_STEP;
+        steps += 1;
+      }
+
+      // Hit the safety valve: drop the backlog rather than replaying it forever.
+      if (steps === GameScene.MAX_STEPS_PER_FRAME) this.simAccumulator = 0;
+    }
+
+    // ── Render ───────────────────────────────────────────────────────────────
+    this.drawScene();
+
+    // ── Check end states ──────────────────────────────────────────────────────
+    if (this.store.gameState === 'game_over') {
+      this.showOverlay('GAME OVER', 0xef4444);
+    }
+    if (this.store.gameState === 'victory') {
+      this.showOverlay('VICTORY!', 0x22c55e);
+    }
+  }
+
+  /**
+   * Advance the simulation by exactly `dt` seconds.
+   * Called zero or more times per frame; must not depend on frame timing.
+   */
+  private stepSimulation(dt: number): void {
     // ── Tick wave spawner ─────────────────────────────────────────────────────
-    if (this.store.gameState === 'wave_active' && !this.isPaused) {
+    if (this.store.gameState === 'wave_active') {
       const spawnPos = this.worldWaypoints[0];
       this.waveSystem.update(dt, spawnPos, {
         onSpawn: (enemy) => {
@@ -337,40 +402,24 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ── Advance enemies along path ────────────────────────────────────────────
-    if (!this.isPaused) {
-      for (const enemy of this.enemies) {
-        if (enemy.dead || enemy.leaked) {
-          if (enemy.leaked && !enemy.dead) {
-            enemy.dead = true;
-            this.store.loseLife();
-            this.soundManager.playEnemyDeath();
-            this.particleManager.enemyLeaked(enemy.x, enemy.y);
-            const g = this.enemyObjects.get(enemy.uid);
-            if (g) { g.destroy(); this.enemyObjects.delete(enemy.uid); }
-          }
-          continue;
-        }
-
-        this.pathSystem.advance(enemy, this.worldWaypoints, dt);
-
-        const g = this.enemyObjects.get(enemy.uid);
-        if (g && 'setPosition' in g) {
-          (g as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
-        }
-
-        if (enemy.leaked) {
-          enemy.dead = true;
-          this.store.loseLife();
-          this.soundManager.playEnemyDeath();
-          this.particleManager.enemyLeaked(enemy.x, enemy.y);
-          const gr = this.enemyObjects.get(enemy.uid);
-          if (gr) { gr.destroy(); this.enemyObjects.delete(enemy.uid); }
-        }
+    for (const enemy of this.enemies) {
+      if (enemy.dead || enemy.leaked) {
+        if (enemy.leaked && !enemy.dead) this.handleLeak(enemy);
+        continue;
       }
+
+      this.pathSystem.advance(enemy, this.worldWaypoints, dt);
+
+      const g = this.enemyObjects.get(enemy.uid);
+      if (g && 'setPosition' in g) {
+        (g as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
+      }
+
+      if (enemy.leaked) this.handleLeak(enemy);
     }
 
     // ── Combat tick ──────────────────────────────────────────────────────────
-    if (this.store.gameState === 'wave_active' && !this.isPaused) {
+    if (this.store.gameState === 'wave_active') {
       const shots = this.combatSystem.tick(this.store.towers, this.enemies, dt);
       for (const shot of shots) {
         this.handleShot(shot);
@@ -384,14 +433,11 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // ── Projectile update (keep animating even when paused for visual continuity) ──
+    // ── Projectile update ────────────────────────────────────────────────────
     this.projectileSystem.update(
       dt,
       this.enemies.map((e) => ({ uid: e.uid, x: e.x, y: e.y, dead: e.dead })),
     );
-
-    // ── Draw everything ──────────────────────────────────────────────────────
-    this.drawHpBars();
 
     // ── Check wave cleared ────────────────────────────────────────────────────
     const allEnemiesDone = this.enemies.length > 0 && this.enemies.every(e => e.dead);
@@ -402,26 +448,44 @@ export class GameScene extends Phaser.Scene {
       this.soundManager.playWaveCleared();
       this.store.onWaveCleared();
     }
+  }
 
-    // ── Check end states ──────────────────────────────────────────────────────
-    if (this.store.gameState === 'game_over') {
-      this.showOverlay('GAME OVER', 0xef4444);
-    }
-    if (this.store.gameState === 'victory') {
-      this.showOverlay('VICTORY!', 0x22c55e);
+  /** Retire a leaked enemy exactly once and charge the player a life. */
+  private handleLeak(enemy: EnemyState): void {
+    enemy.dead = true;
+    this.store.loseLife();
+    this.soundManager.playEnemyDeath();
+    this.particleManager.enemyLeaked(enemy.x, enemy.y);
+    this.retireEnemySprite(enemy.uid);
+  }
+
+  /** Destroy an enemy's display object and forget it. Safe to call twice. */
+  private retireEnemySprite(uid: string): void {
+    const g = this.enemyObjects.get(uid);
+    if (g) {
+      g.destroy();
+      this.enemyObjects.delete(uid);
     }
   }
 
   // ── Combat helpers ────────────────────────────────────────────────────────
 
   private handleShot(shot: ShotEvent): void {
-    if (shot.killed) {
+    // Splash kills pay out too, so gold is no longer tied to the primary target.
+    if (shot.goldEarned > 0) {
       this.store.earnGold(shot.goldEarned);
       this.soundManager.playGoldEarned();
+    }
+
+    if (shot.killed) {
       this.soundManager.playEnemyDeath();
       this.particleManager.enemyDeath(shot.target);
-      const g = this.enemyObjects.get(shot.target.uid);
-      if (g) { g.destroy(); this.enemyObjects.delete(shot.target.uid); }
+      this.retireEnemySprite(shot.target.uid);
+    }
+
+    for (const victim of shot.splashKills) {
+      this.particleManager.enemyDeath(victim);
+      this.retireEnemySprite(victim.uid);
     }
 
     this.soundManager.playShoot();
@@ -431,6 +495,13 @@ export class GameScene extends Phaser.Scene {
       shot.tower.worldX, shot.tower.worldY,
       shot.target.x, shot.target.y,
     );
+
+    // Blast ring, so the player can see what the splash actually covered.
+    const { splashRadius } = shot.tower.definition;
+    if (splashRadius > 0) {
+      this.shotGraphics.lineStyle(2, shot.tower.definition.color, 0.55);
+      this.shotGraphics.strokeCircle(shot.target.x, shot.target.y, splashRadius);
+    }
 
     // Floating damage number
     const dmgStr = shot.wasCrit ? `CRIT! ${shot.damageDealt}` : `${shot.damageDealt}`;
@@ -452,12 +523,32 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private drawHpBars(): void {
+  /**
+   * Wipe the per-frame graphics layers.
+   *
+   * Runs BEFORE the simulation steps, not after: shot lines are emitted from
+   * inside handleShot() during a step, so clearing afterwards erased them in
+   * the same frame and the shot lines never appeared at all.
+   */
+  private clearFrameGraphics(): void {
     this.shotGraphics.clear();
     this.hpGraphics.clear();
     this.towerGraphics.clear();
     this.projectileGraphics.clear();
     this.rangeIndicator.clear();
+  }
+
+  private drawScene(): void {
+    // Draw hovered tower's range (recorded by the pointermove handler)
+    if (this.hoveredTowerUid && this.hoveredTowerUid !== this.selectedTowerUid) {
+      const hovered = this.store.towers.find(t => t.uid === this.hoveredTowerUid);
+      if (hovered) {
+        this.rangeIndicator.lineStyle(1, 0xffffff, 0.3);
+        this.rangeIndicator.strokeCircle(hovered.worldX, hovered.worldY, hovered.definition.range);
+        this.rangeIndicator.fillStyle(hovered.definition.color, 0.08);
+        this.rangeIndicator.fillCircle(hovered.worldX, hovered.worldY, hovered.definition.range);
+      }
+    }
 
     // Draw towers
     this.towerRenderer.draw(this.towerGraphics, this.store.towers, this.skinManager.getTowerColors());

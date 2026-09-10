@@ -22,6 +22,8 @@ export interface TowerDefinition {
   critRate: number;
   /** Critical hit damage multiplier */
   critDamage: number;
+  /** Blast radius in pixels. 0 means the tower only hits its target. */
+  splashRadius: number;
   /** Hex colour used for the tower's rendered circle. */
   color: number;
   /** Sprite / collision circle radius in pixels. */
@@ -38,6 +40,7 @@ export const TOWER_DEFINITIONS: Record<TowerArchetype, TowerDefinition> = {
     fireRate: 1.5,
     critRate: 0.10,
     critDamage: 1.5,
+    splashRadius: 0,
     color: 0x3b82f6,
     radius: 14,
   },
@@ -50,6 +53,7 @@ export const TOWER_DEFINITIONS: Record<TowerArchetype, TowerDefinition> = {
     fireRate: 4.0,
     critRate: 0.20,
     critDamage: 2.0,
+    splashRadius: 0,
     color: 0x22c55e,
     radius: 12,
   },
@@ -62,6 +66,9 @@ export const TOWER_DEFINITIONS: Record<TowerArchetype, TowerDefinition> = {
     fireRate: 0.5,
     critRate: 0.05,
     critDamage: 3.0,
+    // Just over one tile (48px): the Cannon's answer to massed waves, and the
+    // reason it earns its price despite the worst raw damage-per-gold.
+    splashRadius: 60,
     color: 0xeab308,
     radius: 16,
   },
