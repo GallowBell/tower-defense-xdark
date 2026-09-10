@@ -35,7 +35,15 @@ export class TowerUpgradeSystem {
     return gold >= this.getUpgradeCost(tower);
   }
 
+  /**
+   * Raise a tower one level and bank what that level cost.
+   *
+   * The cost is read BEFORE the level changes, so it matches the price quoted
+   * by getUpgradeCost()/getProjectedStats() at the moment the player agreed to
+   * it. Callers must charge that same pre-upgrade price.
+   */
   applyUpgrade(tower: TowerState): void {
+    const cost = this.getUpgradeCost(tower);
     const projected = this.getProjectedStats(tower);
     tower.definition = {
       ...tower.definition,
@@ -44,5 +52,6 @@ export class TowerUpgradeSystem {
       fireRate: projected.nextFireRate,
     };
     tower.level += 1;
+    tower.investedGold += cost;
   }
 }

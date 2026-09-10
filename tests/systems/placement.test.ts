@@ -177,14 +177,24 @@ describe('GameStateStore', () => {
 
   // ── spendGold ──────────────────────────────────────────────────────────────
 
-  it('spendGold reduces gold by the given amount', () => {
-    store.spendGold(50);
+  it('spendGold reduces gold by the given amount and reports success', () => {
+    expect(store.spendGold(50)).toBe(true);
     expect(store.gold).toBe(BALANCE.startingGold - 50);
   });
 
-  it('spendGold does not go below 0', () => {
-    store.spendGold(9999);
+  it('spendGold refuses an unaffordable spend and leaves gold untouched', () => {
+    expect(store.spendGold(9999)).toBe(false);
+    expect(store.gold).toBe(BALANCE.startingGold);
+  });
+
+  it('spendGold allows spending the exact remaining balance', () => {
+    expect(store.spendGold(BALANCE.startingGold)).toBe(true);
     expect(store.gold).toBe(0);
+  });
+
+  it('spendGold refuses a negative amount rather than granting gold', () => {
+    expect(store.spendGold(-100)).toBe(false);
+    expect(store.gold).toBe(BALANCE.startingGold);
   });
 
   // ── earnGold ───────────────────────────────────────────────────────────────
@@ -317,6 +327,7 @@ function makeTower(uid: string, gridX: number, gridY: number): TowerState {
     worldY: 0,
     cooldown: 0,
     level: 1,
+    investedGold: 100,
     definition: {
       id: 'basic',
       displayName: 'Archer',

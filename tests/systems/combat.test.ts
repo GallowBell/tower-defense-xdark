@@ -18,6 +18,7 @@ function makeTower(overrides?: Partial<TowerState>): TowerState {
     worldY: 100,
     cooldown: 0,
     level: 1,
+    investedGold: 100,
     definition: {
       id: 'basic',
       displayName: 'Archer',

@@ -29,5 +29,7 @@ export interface TowerState {
   cooldown: number;
   /** Upgrade level (1-based) */
   level: number;
+  /** Total gold sunk into this tower: purchase price plus every upgrade paid for. */
+  investedGold: number;
   definition: TowerDefinition;
 }
