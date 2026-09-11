@@ -22,6 +22,7 @@ function makeTower(archetype: TowerArchetype = 'basic'): TowerState {
     worldX: 100,
     worldY: 100,
     cooldown: 0,
+    targetUid: null,
     level: 1,
     investedGold: def.cost,
     baseDefinition: def,

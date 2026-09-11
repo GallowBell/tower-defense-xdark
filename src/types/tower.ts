@@ -29,6 +29,12 @@ export interface TowerState {
   worldY: number;
   /** Time remaining until next shot, in seconds */
   cooldown: number;
+  /**
+   * Enemy this tower is currently tracking, or null when nothing is in range.
+   * Refreshed every tick — including while reloading — so a barrel keeps
+   * pointing at a live target instead of at whatever it last shot.
+   */
+  targetUid: string | null;
   /** Upgrade level (1-based) */
   level: number;
   /** Total gold sunk into this tower: purchase price plus every upgrade paid for. */

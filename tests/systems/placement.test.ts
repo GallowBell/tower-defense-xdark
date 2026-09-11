@@ -340,6 +340,7 @@ function makeTower(uid: string, gridX: number, gridY: number): TowerState {
     worldX: 0,
     worldY: 0,
     cooldown: 0,
+    targetUid: null,
     level: 1,
     investedGold: 100,
     baseDefinition: definition,

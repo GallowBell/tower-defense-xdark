@@ -8,9 +8,16 @@ import type { EnemyState } from '../../types/enemy';
 export class ParticleManager {
   private scene: Phaser.Scene;
   private initialized = false;
+  /** Matches the game's speed multiplier; 0 while paused. */
+  private timeScale = 1;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+  }
+
+  /** Run future bursts at this rate, so effects keep pace with the sim. */
+  setTimeScale(scale: number): void {
+    this.timeScale = scale;
   }
 
   /** Generate the particle dot texture once. */
@@ -36,6 +43,7 @@ export class ParticleManager {
         tint: color,
         emitting: false,
       });
+      emitter.timeScale = this.timeScale;
       emitter.explode(count);
       this.scene.time.delayedCall(600, () => {
         if (emitter.active) emitter.destroy();

@@ -33,6 +33,7 @@ function makeTower(overrides?: Partial<TowerState>): TowerState {
     worldX: 100,
     worldY: 100,
     cooldown: 0,
+    targetUid: null,
     level: 1,
     investedGold: 100,
     baseDefinition: definition,
@@ -590,6 +591,74 @@ describe('DamageSystem splash', () => {
     const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
 
     expect(ds.applyHit(splashTower(), primary).splashHits).toHaveLength(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CombatSystem — target tracking (what renderers aim at)
+// ═════════════════════════════════════════════════════════════════════════════
+describe('CombatSystem target tracking', () => {
+  let cs: CombatSystem;
+
+  beforeEach(() => {
+    cs = new CombatSystem();
+    vi.spyOn(Math, 'random').mockReturnValue(0.99); // never crit
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('records the enemy a tower is tracking', () => {
+    const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0 });
+    const enemy = makeEnemy({ uid: 'enemy_7' as EnemyId, x: 50, y: 0 });
+
+    cs.tick([tower], [enemy], 0.016);
+
+    expect(tower.targetUid).toBe('enemy_7');
+  });
+
+  it('keeps tracking while reloading, so a barrel does not aim at a corpse', () => {
+    // The reason this is updated before the cooldown check: a reloading tower
+    // still has to point somewhere sensible.
+    const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 5 });
+    const enemy = makeEnemy({ uid: 'enemy_3' as EnemyId, x: 50, y: 0 });
+
+    const events = cs.tick([tower], [enemy], 0.016);
+
+    expect(events).toHaveLength(0); // still reloading
+    expect(tower.targetUid).toBe('enemy_3');
+  });
+
+  it('clears the target when nothing is in range', () => {
+    const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0, targetUid: 'enemy_1' });
+
+    cs.tick([tower], [makeEnemy({ x: 5000, y: 5000 })], 0.016);
+
+    expect(tower.targetUid).toBeNull();
+  });
+
+  it('clears the target once that enemy dies', () => {
+    const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0 });
+    const enemy = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 50, y: 0, hp: 20 });
+
+    cs.tick([tower], [enemy], 0.016); // kills it
+    expect(enemy.dead).toBe(true);
+
+    tower.cooldown = 0;
+    cs.tick([tower], [enemy], 0.016);
+
+    expect(tower.targetUid).toBeNull();
+  });
+
+  it('switches to whichever enemy is furthest along the path', () => {
+    const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0 });
+    const behind = makeEnemy({ uid: 'enemy_a' as EnemyId, x: 40, y: 0, waypointIndex: 1 });
+    const ahead = makeEnemy({ uid: 'enemy_b' as EnemyId, x: 60, y: 0, waypointIndex: 4 });
+
+    cs.tick([tower], [behind, ahead], 0.016);
+
+    expect(tower.targetUid).toBe('enemy_b');
   });
 });
 
