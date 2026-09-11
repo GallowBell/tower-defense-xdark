@@ -3,18 +3,12 @@ import Phaser from 'phaser';
 import { GAME_COLORS, SCENE_KEYS } from '../app/constants';
 import { MAP_DEFINITIONS, DEFAULT_MAP_ID } from '../data/mapDefinitions';
 import type { MapDefinition } from '../data/mapDefinitions';
-import { GameStateStore } from '../systems/game-state/GameStateStore';
-import { PlacementSystem } from '../systems/placement/PlacementSystem';
-import { PathSystem } from '../systems/path/PathSystem';
-import { EnemyFactory } from '../systems/enemies/EnemyFactory';
-import { WaveSystem } from '../systems/waves/WaveSystem';
-import { WAVE_DEFINITIONS } from '../systems/waves/waveDefinitions';
-import { CombatSystem } from '../systems/combat/CombatSystem';
+import type { GameStateStore } from '../systems/game-state/GameStateStore';
+import { RunSimulator, SIM_STEP } from '../systems/sim/RunSimulator';
 import type { ShotEvent } from '../systems/combat/CombatSystem';
 import type { EnemyState } from '../types/enemy';
 import type { TowerArchetype } from '../types/tower';
-import type { Vec2 } from '../types/game';
-import { worldToGrid, tileRect, getTileType, waypointsToWorld } from '../utils/grid';
+import { worldToGrid, tileRect, getTileType } from '../utils/grid';
 import { TowerRenderer } from '../systems/render/TowerRenderer';
 import { EnemyRenderer } from '../systems/render/EnemyRenderer';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
@@ -22,25 +16,26 @@ import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { SkinManager } from '../systems/skins/SkinManager';
 import { SoundManager } from '../systems/audio/SoundManager';
 import { ParticleManager } from '../systems/effects/ParticleManager';
-import { DIFFICULTY } from '../data/difficultyScaling';
 
 export class GameScene extends Phaser.Scene {
-  private store!: GameStateStore;
+  /**
+   * The run itself. This scene renders it and feeds it input; it does not
+   * simulate anything of its own, so what ships is what the tests exercise.
+   */
+  private sim!: RunSimulator;
   private map!: MapDefinition;
-  private placementSystem!: PlacementSystem;
+
+  /** Authoritative run state, owned by the simulator. Read by UIScene. */
+  private get store(): GameStateStore {
+    return this.sim.store;
+  }
 
   /** The archetype the player currently has selected — updated externally. */
   selectedArchetype: TowerArchetype = 'basic';
 
-  // ── Enemy / wave fields ───────────────────────────────────────────────────
-  private pathSystem!: PathSystem;
-  private waveSystem!: WaveSystem;
-  private enemyFactory!: EnemyFactory;
-  private worldWaypoints!: Vec2[];
-  private enemies: EnemyState[] = [];
+  // ── Enemy visual fields ───────────────────────────────────────────────────
   private enemyRenderer!: EnemyRenderer;
   private enemyObjects!: Map<string, Phaser.GameObjects.GameObject>;
-  private waveSpawnComplete: boolean = false;
 
   // ── Tower visual fields ───────────────────────────────────────────────────
   private towerRenderer!: TowerRenderer;
@@ -50,14 +45,14 @@ export class GameScene extends Phaser.Scene {
   private projectileSystem!: ProjectileSystem;
   private projectileGraphics!: Phaser.GameObjects.Graphics;
 
-  // ── Combat fields ─────────────────────────────────────────────────────────
-  private combatSystem!: CombatSystem;
+  // ── Combat visual fields ──────────────────────────────────────────────────
   private shotGraphics!: Phaser.GameObjects.Graphics;
   private hpGraphics!: Phaser.GameObjects.Graphics;
   private rangeIndicator!: Phaser.GameObjects.Graphics;
 
   // ── Upgrade fields ────────────────────────────────────────────────────────
-  private upgradeSystem!: TowerUpgradeSystem;
+  /** Stateless. Read by UIScene to show the upgrade panel's projections. */
+  readonly upgradeSystem = new TowerUpgradeSystem();
   private selectedTowerUid: string | null = null;
 
   // ── Overlay guard ─────────────────────────────────────────────────────────
@@ -71,8 +66,8 @@ export class GameScene extends Phaser.Scene {
   private particleManager!: ParticleManager;
 
   // ── Fixed-timestep simulation ─────────────────────────────────────────────
-  /** Seconds of simulated time per step. The sim only ever advances by this. */
-  private static readonly SIM_STEP = 1 / 60;
+  /** Seconds of simulated time per step, shared with the simulator. */
+  private static readonly SIM_STEP = SIM_STEP;
   /** Safety valve so a long frame (tab-out, GC pause) can't spiral. */
   private static readonly MAX_STEPS_PER_FRAME = 8;
   private simAccumulator: number = 0;
@@ -98,36 +93,37 @@ export class GameScene extends Phaser.Scene {
     // Phaser reuses this Scene instance across scene.restart(), so field
     // initialisers do NOT re-run. Anything mutable must be reset by hand or it
     // leaks into the next run (a stale overlayShown froze the board entirely).
-    this.enemies = [];
     this.overlayShown = false;
     this.isPaused = false;
     this.speedMultiplier = 1;
     this.simAccumulator = 0;
-    this.waveSpawnComplete = false;
     this.hoveredTowerUid = null;
     this.pauseOverlayObjs = [];
 
-    // ── 1. Store ──────────────────────────────────────────────────────────────
-    this.store = new GameStateStore();
-    this.registry.set('store', this.store);
-
-    // ── 2. Map ────────────────────────────────────────────────────────────────
+    // ── 1. Map ────────────────────────────────────────────────────────────────
     const selectedMapId = this.registry.get('selectedMapId') as string | null;
     this.map = MAP_DEFINITIONS[selectedMapId ?? DEFAULT_MAP_ID];
 
-    // ── 3. Placement system ───────────────────────────────────────────────────
-    this.placementSystem = new PlacementSystem();
-
-    // ── 4. Enemy / wave systems ───────────────────────────────────────────────
-    this.pathSystem = new PathSystem();
-    this.enemyFactory = new EnemyFactory();
-    this.waveSystem = new WaveSystem(this.enemyFactory);
-    this.worldWaypoints = waypointsToWorld(this.map);
+    // ── 2. Enemy rendering ────────────────────────────────────────────────────
     this.enemyRenderer = new EnemyRenderer();
     this.enemyObjects = new Map();
 
-    // ── 4b. Combat system ─────────────────────────────────────────────────────
-    this.combatSystem = new CombatSystem();
+    // ── 3. The run ────────────────────────────────────────────────────────────
+    // Hooks are presentation only — sound, sprites, particles. Every rule that
+    // decides the run lives in RunSimulator.
+    this.sim = new RunSimulator(this.map, {
+      onSpawn: (enemy) => this.spawnEnemySprite(enemy),
+      onShot: (shot) => this.handleShot(shot),
+      onLeak: (enemy) => {
+        this.soundManager.playEnemyDeath();
+        this.particleManager.enemyLeaked(enemy.x, enemy.y);
+        this.retireEnemySprite(enemy.uid);
+      },
+      onWaveCleared: () => this.soundManager.playWaveCleared(),
+    });
+    this.registry.set('store', this.sim.store);
+
+    // ── 4. Combat visuals ─────────────────────────────────────────────────────
     this.shotGraphics = this.add.graphics();
     this.hpGraphics = this.add.graphics();
     this.rangeIndicator = this.add.graphics();
@@ -138,8 +134,7 @@ export class GameScene extends Phaser.Scene {
     this.towerGraphics = this.add.graphics();
     this.projectileGraphics = this.add.graphics();
 
-    // ── 4d. Upgrade system ────────────────────────────────────────────────────
-    this.upgradeSystem = new TowerUpgradeSystem();
+    // ── 4d. Tower selection ───────────────────────────────────────────────────
     this.selectedTowerUid = null;
     this.registry.set('selectedTowerUid', null);
 
@@ -191,13 +186,9 @@ export class GameScene extends Phaser.Scene {
           const grid = worldToGrid(pointer.worldX, pointer.worldY);
           if (!grid) return;
 
-          const result = this.placementSystem.attempt(
-            this.map, this.store.towers, this.store.gold,
-            this.store.gameState, grid.x, grid.y, this.selectedArchetype,
-          );
+          const result = this.sim.placeTower(grid.x, grid.y, this.selectedArchetype);
 
-          if (result.success && this.store.spendGold(result.goldSpent!)) {
-            this.store.addTower(result.tower!);
+          if (result.success) {
             this.soundManager.playUIClick();
             this.selectedTowerUid = null;
             this.registry.set('selectedTowerUid', null);
@@ -212,10 +203,8 @@ export class GameScene extends Phaser.Scene {
           const dist = Math.sqrt(dx * dx + dy * dy);
 
           if (dist < tower.definition.radius + sellRadius) {
-            const refund = Math.floor(tower.investedGold * DIFFICULTY.sellRefundRatio);
-            this.store.earnGold(refund);
+            this.sim.sellTower(tower.uid);
             this.soundManager.playSell();
-            this.store.removeTower(tower.uid);
             if (this.selectedTowerUid === tower.uid) {
               this.selectedTowerUid = null;
               this.registry.set('selectedTowerUid', null);
@@ -250,13 +239,8 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-U', () => {
       if (this.isPaused || !this.selectedTowerUid) return;
       const tower = this.store.towers.find(t => t.uid === this.selectedTowerUid);
-      // canUpgrade() covers both affordability and the max-level cap.
-      if (!tower || !this.upgradeSystem.canUpgrade(tower, this.store.gold)) return;
-      // Read the price BEFORE upgrading: afterwards getUpgradeCost() quotes the
-      // next level's price, which is not what the player was shown.
-      const cost = this.upgradeSystem.getUpgradeCost(tower);
-      if (!this.store.spendGold(cost)) return;
-      this.upgradeSystem.applyUpgrade(tower);
+      if (!tower || this.sim.upgradeTower(tower.uid) === 0) return;
+
       this.soundManager.playUpgrade();
       this.particleManager.towerUpgrade(tower.worldX, tower.worldY);
       this.registry.set('selectedTowerUid', this.selectedTowerUid);
@@ -323,14 +307,8 @@ export class GameScene extends Phaser.Scene {
   // ── Wave control ──────────────────────────────────────────────────────────
 
   private startNextWave(): void {
-    if (this.isPaused || (this.store.gameState !== 'idle' && this.store.gameState !== 'wave_cleared')) return;
-    const waveIndex = this.store.wave - 1;
-    const waveDef = WAVE_DEFINITIONS[waveIndex];
-    if (!waveDef) return;
-    this.store.nextWave();
-    this.soundManager.playWaveStart();
-    this.waveSpawnComplete = false;
-    this.waveSystem.startWave(waveDef);
+    if (this.isPaused) return;
+    if (this.sim.startNextWave()) this.soundManager.playWaveStart();
   }
 
   // ── Per-frame update ──────────────────────────────────────────────────────
@@ -354,13 +332,22 @@ export class GameScene extends Phaser.Scene {
         this.simAccumulator >= GameScene.SIM_STEP &&
         steps < GameScene.MAX_STEPS_PER_FRAME
       ) {
-        this.stepSimulation(GameScene.SIM_STEP);
+        this.sim.step(GameScene.SIM_STEP);
         this.simAccumulator -= GameScene.SIM_STEP;
         steps += 1;
       }
 
       // Hit the safety valve: drop the backlog rather than replaying it forever.
       if (steps === GameScene.MAX_STEPS_PER_FRAME) this.simAccumulator = 0;
+
+      // Projectiles are decoration, so they animate once per frame over however
+      // much time the simulation actually advanced.
+      if (steps > 0) {
+        this.projectileSystem.update(
+          steps * GameScene.SIM_STEP,
+          this.sim.enemies.map(e => ({ uid: e.uid, x: e.x, y: e.y, dead: e.dead })),
+        );
+      }
     }
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -375,88 +362,13 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Advance the simulation by exactly `dt` seconds.
-   * Called zero or more times per frame; must not depend on frame timing.
-   */
-  private stepSimulation(dt: number): void {
-    // ── Tick wave spawner ─────────────────────────────────────────────────────
-    if (this.store.gameState === 'wave_active') {
-      const spawnPos = this.worldWaypoints[0];
-      this.waveSystem.update(dt, spawnPos, {
-        onSpawn: (enemy) => {
-          // Apply difficulty HP scaling
-          const hpMult = DIFFICULTY.enemyHpScale(this.store.wave);
-          enemy.hp = Math.round(enemy.hp * hpMult);
-          enemy.maxHp = enemy.hp;
-
-          this.enemies.push(enemy);
-          const enemyColor = this.skinManager.getEnemyColors()[enemy.archetype as keyof ReturnType<typeof this.skinManager.getEnemyColors>] ?? enemy.color;
-          const obj = this.enemyRenderer.createObject(this, enemy, enemyColor);
-          this.enemyObjects.set(enemy.uid, obj);
-        },
-        onWaveSpawnComplete: () => {
-          this.waveSpawnComplete = true;
-        },
-      });
-    }
-
-    // ── Advance enemies along path ────────────────────────────────────────────
-    for (const enemy of this.enemies) {
-      if (enemy.dead || enemy.leaked) {
-        if (enemy.leaked && !enemy.dead) this.handleLeak(enemy);
-        continue;
-      }
-
-      this.pathSystem.advance(enemy, this.worldWaypoints, dt);
-
-      const g = this.enemyObjects.get(enemy.uid);
-      if (g && 'setPosition' in g) {
-        (g as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
-      }
-
-      if (enemy.leaked) this.handleLeak(enemy);
-    }
-
-    // ── Combat tick ──────────────────────────────────────────────────────────
-    if (this.store.gameState === 'wave_active') {
-      const shots = this.combatSystem.tick(this.store.towers, this.enemies, dt);
-      for (const shot of shots) {
-        this.handleShot(shot);
-        if (shot.target && !shot.target.dead) {
-          this.projectileSystem.fire(
-            shot.tower.worldX, shot.tower.worldY,
-            { uid: shot.target.uid, x: shot.target.x, y: shot.target.y },
-            shot.tower.definition.color,
-          );
-        }
-      }
-    }
-
-    // ── Projectile update ────────────────────────────────────────────────────
-    this.projectileSystem.update(
-      dt,
-      this.enemies.map((e) => ({ uid: e.uid, x: e.x, y: e.y, dead: e.dead })),
-    );
-
-    // ── Check wave cleared ────────────────────────────────────────────────────
-    const allEnemiesDone = this.enemies.length > 0 && this.enemies.every(e => e.dead);
-    if (this.store.gameState === 'wave_active' && this.waveSpawnComplete && allEnemiesDone) {
-      this.enemies = this.enemies.filter(e => !e.dead);
-      const goldBonus = Math.round((WAVE_DEFINITIONS[this.store.wave - 1]?.goldBonus ?? 0) * DIFFICULTY.rewardScale(this.store.wave));
-      this.store.earnGold(goldBonus);
-      this.soundManager.playWaveCleared();
-      this.store.onWaveCleared();
-    }
-  }
-
-  /** Retire a leaked enemy exactly once and charge the player a life. */
-  private handleLeak(enemy: EnemyState): void {
-    enemy.dead = true;
-    this.store.loseLife();
-    this.soundManager.playEnemyDeath();
-    this.particleManager.enemyLeaked(enemy.x, enemy.y);
-    this.retireEnemySprite(enemy.uid);
+  /** Create the sprite for a freshly spawned enemy. */
+  private spawnEnemySprite(enemy: EnemyState): void {
+    const enemyColor =
+      this.skinManager.getEnemyColors()[
+        enemy.archetype as keyof ReturnType<typeof this.skinManager.getEnemyColors>
+      ] ?? enemy.color;
+    this.enemyObjects.set(enemy.uid, this.enemyRenderer.createObject(this, enemy, enemyColor));
   }
 
   /** Destroy an enemy's display object and forget it. Safe to call twice. */
@@ -471,11 +383,8 @@ export class GameScene extends Phaser.Scene {
   // ── Combat helpers ────────────────────────────────────────────────────────
 
   private handleShot(shot: ShotEvent): void {
-    // Splash kills pay out too, so gold is no longer tied to the primary target.
-    if (shot.goldEarned > 0) {
-      this.store.earnGold(shot.goldEarned);
-      this.soundManager.playGoldEarned();
-    }
+    // The simulator already banked the gold — this just plays the sound.
+    if (shot.goldEarned > 0) this.soundManager.playGoldEarned();
 
     if (shot.killed) {
       this.soundManager.playEnemyDeath();
@@ -486,6 +395,14 @@ export class GameScene extends Phaser.Scene {
     for (const victim of shot.splashKills) {
       this.particleManager.enemyDeath(victim);
       this.retireEnemySprite(victim.uid);
+    }
+
+    if (!shot.target.dead) {
+      this.projectileSystem.fire(
+        shot.tower.worldX, shot.tower.worldY,
+        { uid: shot.target.uid, x: shot.target.x, y: shot.target.y },
+        shot.tower.definition.color,
+      );
     }
 
     this.soundManager.playShoot();
@@ -577,9 +494,15 @@ export class GameScene extends Phaser.Scene {
       this.projectileGraphics.fillCircle(px, py, 3);
     }
 
-    // Draw HP bars
-    for (const enemy of this.enemies) {
+    // Draw HP bars, and keep each sprite on top of its enemy
+    for (const enemy of this.sim.enemies) {
       if (enemy.dead) continue;
+
+      const sprite = this.enemyObjects.get(enemy.uid);
+      if (sprite && 'setPosition' in sprite) {
+        (sprite as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
+      }
+
       const barWidth = enemy.radius * 2;
       const barHeight = 4;
       const barX = enemy.x - enemy.radius;

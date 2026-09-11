@@ -73,10 +73,11 @@ describe('PlacementSystem', () => {
 
   // ── Failure: invalid_state ──────────────────────────────────────────────────
 
-  it('returns invalid_state when gameState is wave_active', () => {
+  it('allows building during an active wave', () => {
+    // Reacting to a leak in progress is the point — see BUILDABLE_STATES.
     const result = ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'wave_active', 2, 2, 'basic');
-    expect(result.success).toBe(false);
-    expect(result.reason).toBe('invalid_state');
+    expect(result.success).toBe(true);
+    expect(result.tower).toBeDefined();
   });
 
   it('returns invalid_state when gameState is placing', () => {

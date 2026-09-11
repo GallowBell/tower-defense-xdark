@@ -11,6 +11,14 @@ export interface PlacementResult {
   goldSpent?: number;
 }
 
+/**
+ * States the player is allowed to build in.
+ *
+ * 'wave_active' is included deliberately: gold earned mid-wave used to be dead
+ * weight until the wave ended, and a leak was something you could only watch.
+ */
+const BUILDABLE_STATES: readonly GameState[] = ['idle', 'wave_cleared', 'wave_active'];
+
 export class PlacementSystem {
   private nextUid = 0;
 
@@ -24,7 +32,7 @@ export class PlacementSystem {
     gridY: number,
     archetype: TowerArchetype,
   ): PlacementResult {
-    if (gameState !== 'idle' && gameState !== 'wave_cleared') {
+    if (!BUILDABLE_STATES.includes(gameState)) {
       return { success: false, reason: 'invalid_state' };
     }
     if (!isBuildable(map, gridX, gridY)) {

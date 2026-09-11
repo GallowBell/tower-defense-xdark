@@ -3,6 +3,8 @@ import Phaser from 'phaser';
 import { GAME_COLORS, SCENE_KEYS } from '../app/constants';
 import { GameStateStore } from '../systems/game-state/GameStateStore';
 import type { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
+import { WAVE_DEFINITIONS } from '../systems/waves/waveDefinitions';
+import { describeWave } from '../systems/waves/waveSummary';
 
 export class UIScene extends Phaser.Scene {
   private goldText!: Phaser.GameObjects.Text;
@@ -17,6 +19,7 @@ export class UIScene extends Phaser.Scene {
     { key: 'heavy', label: 'Cannon [3]  175g', cost: 175 },
   ];
   private upgradeTexts: Phaser.GameObjects.Text[] = [];
+  private wavePreviewText!: Phaser.GameObjects.Text;
 
   constructor() {
     super(SCENE_KEYS.UI);
@@ -70,10 +73,36 @@ export class UIScene extends Phaser.Scene {
       this.selectorTexts.push(t);
     });
 
+    // ── Wave preview ──────────────────────────────────────────────────────────
+    // Right-aligned under the top bar, so it never collides with the upgrade
+    // panel on the left. Composition comes straight from the wave data.
+    this.wavePreviewText = this.add.text(this.cameras.main.width - 16, 60, '', {
+      color: '#e2e8f0',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      backgroundColor: '#1e293b',
+      padding: { x: 8, y: 6 },
+      align: 'right',
+    }).setOrigin(1, 0);
+
     // ── Keyboard shortcuts 1 / 2 / 3 ─────────────────────────────────────────
     this.input.keyboard?.on('keydown-ONE',   () => this.selectorTexts[0]?.emit('pointerdown'));
     this.input.keyboard?.on('keydown-TWO',   () => this.selectorTexts[1]?.emit('pointerdown'));
     this.input.keyboard?.on('keydown-THREE', () => this.selectorTexts[2]?.emit('pointerdown'));
+  }
+
+  /**
+   * What the wave-preview panel should say right now: the composition of the
+   * wave in progress, or of the one the player is about to call in.
+   */
+  private wavePreview(gameState: string, wave: number): string {
+    if (gameState === 'game_over' || gameState === 'victory') return '';
+
+    const composition = describeWave(WAVE_DEFINITIONS[wave - 1]);
+    if (!composition) return '';
+
+    const heading = gameState === 'wave_active' ? `Wave ${wave} incoming` : `Next — Wave ${wave}`;
+    return `${heading}\n${composition}`;
   }
 
   update(): void {
@@ -85,6 +114,7 @@ export class UIScene extends Phaser.Scene {
     this.livesText.setText(`Lives: ${s.lives}`);
     this.waveText.setText(`Wave: ${s.wave}/${s.totalWaves}`);
     this.stateText.setText('State: ' + s.gameState);
+    this.wavePreviewText.setText(this.wavePreview(s.gameState, s.wave));
 
     // ── Update selector button affordability ──────────────────────────────────
     const gold = s.gold;
