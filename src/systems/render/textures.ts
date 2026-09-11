@@ -24,6 +24,8 @@ export const TEXTURE_KEYS = {
     heavy: `${PREFIX}-tower-heavy`,
   },
   towerBarrel: `${PREFIX}-tower-barrel`,
+  muzzleFlash: `${PREFIX}-muzzle-flash`,
+  splashRing: `${PREFIX}-splash-ring`,
 } as const;
 
 /** Texture key for an archetype's base. */
@@ -43,6 +45,26 @@ const BARREL_W = 34;
 const BARREL_H = 12;
 
 /**
+ * Distance from the tower centre to the muzzle, in barrel-local pixels.
+ *
+ * The barrel pivots at origin 0.1, so 90% of its length sticks out past the
+ * centre. Anything that wants to sit at the firing end — the muzzle flash —
+ * needs this rather than its own guess.
+ */
+export const BARREL_TIP_DISTANCE = BARREL_W * 0.9;
+
+/** Muzzle flash bounds. Drawn pointing +x so it shares the barrel's rotation. */
+const FLASH_W = 30;
+const FLASH_H = 24;
+
+/**
+ * Radius the splash ring is drawn at. Callers scale by
+ * `splashRadius / SPLASH_RING_RADIUS` to match a tower's real blast.
+ */
+export const SPLASH_RING_RADIUS = 60;
+const RING_SIZE = 128;
+
+/**
  * Create every texture this module owns, once per game.
  *
  * Safe to call repeatedly — Phaser keeps textures in a global manager that
@@ -53,6 +75,8 @@ export function ensureTextures(scene: Phaser.Scene): void {
   ensureTowerBase(scene, 'fast', drawTriangle);
   ensureTowerBase(scene, 'heavy', drawPentagon);
   ensureBarrel(scene);
+  ensureMuzzleFlash(scene);
+  ensureSplashRing(scene);
 }
 
 type ShapeDrawer = (g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number) => void;
@@ -87,6 +111,43 @@ function ensureBarrel(scene: Phaser.Scene): void {
   g.fillRect(BARREL_W - 8, 0, 8, BARREL_H);
 
   g.generateTexture(TEXTURE_KEYS.towerBarrel, BARREL_W, BARREL_H);
+  g.destroy();
+}
+
+/**
+ * A stubby flare that reads as a gunshot at 30px: a broad diamond of light
+ * with a hot core near the muzzle.
+ */
+function ensureMuzzleFlash(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEXTURE_KEYS.muzzleFlash)) return;
+
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  const cy = FLASH_H / 2;
+
+  g.fillStyle(0xffffff, 0.5);
+  g.beginPath();
+  g.moveTo(0, cy);
+  g.lineTo(FLASH_W * 0.45, cy - FLASH_H * 0.5);
+  g.lineTo(FLASH_W, cy);
+  g.lineTo(FLASH_W * 0.45, cy + FLASH_H * 0.5);
+  g.closePath();
+  g.fillPath();
+
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(FLASH_W * 0.28, cy, FLASH_H * 0.22);
+
+  g.generateTexture(TEXTURE_KEYS.muzzleFlash, FLASH_W, FLASH_H);
+  g.destroy();
+}
+
+/** A plain ring, scaled and faded outward to show a blast's real reach. */
+function ensureSplashRing(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEXTURE_KEYS.splashRing)) return;
+
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  g.lineStyle(5, 0xffffff, 1);
+  g.strokeCircle(RING_SIZE / 2, RING_SIZE / 2, SPLASH_RING_RADIUS);
+  g.generateTexture(TEXTURE_KEYS.splashRing, RING_SIZE, RING_SIZE);
   g.destroy();
 }
 

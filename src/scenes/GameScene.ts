@@ -11,6 +11,7 @@ import type { TowerArchetype } from '../types/tower';
 import { worldToGrid, tileRect, getTileType } from '../utils/grid';
 import { TowerView } from '../systems/render/TowerView';
 import { FloatingTextPool } from '../systems/render/FloatingTextPool';
+import { SplashRingPool } from '../systems/render/SplashRingPool';
 import { EnemyRenderer } from '../systems/render/EnemyRenderer';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
@@ -43,6 +44,7 @@ export class GameScene extends Phaser.Scene {
   private towerViews!: Map<string, TowerView>;
   private towerGraphics!: Phaser.GameObjects.Graphics;
   private floatingText!: FloatingTextPool;
+  private splashRings!: SplashRingPool;
 
   // ── Projectile visual fields ──────────────────────────────────────────────
   private projectileSystem!: ProjectileSystem;
@@ -144,6 +146,7 @@ export class GameScene extends Phaser.Scene {
     this.towerGraphics = this.add.graphics().setDepth(RENDER_DEPTH.rangeIndicator);
     this.projectileGraphics = this.add.graphics().setDepth(RENDER_DEPTH.projectiles);
     this.floatingText = new FloatingTextPool(this);
+    this.splashRings = new SplashRingPool(this);
 
     // ── 4d. Tower selection ───────────────────────────────────────────────────
     this.selectedTowerUid = null;
@@ -200,7 +203,7 @@ export class GameScene extends Phaser.Scene {
           const result = this.sim.placeTower(grid.x, grid.y, this.selectedArchetype);
 
           if (result.success) {
-            this.addTowerView(result.tower!);
+            this.addTowerView(result.tower!, true);
             this.soundManager.playUIClick();
             this.selectedTowerUid = null;
             this.registry.set('selectedTowerUid', null);
@@ -216,7 +219,7 @@ export class GameScene extends Phaser.Scene {
 
           if (dist < tower.definition.radius + sellRadius) {
             this.sim.sellTower(tower.uid);
-            this.removeTowerView(tower.uid);
+            this.retireTowerView(tower.uid);
             this.soundManager.playSell();
             if (this.selectedTowerUid === tower.uid) {
               this.selectedTowerUid = null;
@@ -255,6 +258,7 @@ export class GameScene extends Phaser.Scene {
       if (!tower || this.sim.upgradeTower(tower.uid) === 0) return;
 
       this.soundManager.playUpgrade();
+      this.towerViews.get(tower.uid)?.playUpgradePop();
       this.particleManager.towerUpgrade(tower.worldX, tower.worldY);
       this.registry.set('selectedTowerUid', this.selectedTowerUid);
     });
@@ -306,6 +310,7 @@ export class GameScene extends Phaser.Scene {
     // ── 8b. Tear-down ─────────────────────────────────────────────────────────
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.floatingText.clear();
+      this.splashRings.clear();
       this.towerViews.clear();
     });
 
@@ -403,14 +408,30 @@ export class GameScene extends Phaser.Scene {
 
   // ── Tower views ────────────────────────────────────────────────────────────
 
-  private addTowerView(tower: typeof this.store.towers[number]): void {
+  /**
+   * @param animateIn true when the player just built this tower, so it drops
+   *   in. False on the recovery path below, which is backfilling a view for a
+   *   tower that has been standing there all along.
+   */
+  private addTowerView(tower: typeof this.store.towers[number], animateIn = false): void {
     const color = this.skinManager.resolveTowerColor(tower.archetype, tower.definition.color);
-    this.towerViews.set(tower.uid, new TowerView(this, tower, color));
+    const view = new TowerView(this, tower, color);
+    this.towerViews.set(tower.uid, view);
+    if (animateIn) view.playPlaceIn();
   }
 
-  private removeTowerView(uid: string): void {
-    this.towerViews.get(uid)?.destroy();
+  /**
+   * Drop a sold tower's view and let it shrink away.
+   *
+   * The view leaves the registry immediately — the tower is already gone from
+   * the simulation, so it must stop being synced this frame, and the tile it
+   * stood on is free to build on again before the animation finishes.
+   */
+  private retireTowerView(uid: string): void {
+    const view = this.towerViews.get(uid);
+    if (!view) return;
     this.towerViews.delete(uid);
+    view.playSellOut();
   }
 
   /**
@@ -482,6 +503,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.soundManager.playShoot();
+    this.towerViews.get(shot.tower.uid)?.fire();
     this.particleManager.towerFire(shot.tower.worldX, shot.tower.worldY, shot.tower.definition.color);
     this.shotGraphics.lineStyle(1, 0xffffff, 0.7);
     this.shotGraphics.lineBetween(
@@ -489,11 +511,12 @@ export class GameScene extends Phaser.Scene {
       shot.target.x, shot.target.y,
     );
 
-    // Blast ring, so the player can see what the splash actually covered.
+    // Blast ring, so the player can see what the splash actually covered. It
+    // expands into the real radius over ~a third of a second: stroked straight
+    // onto shotGraphics it lasted one frame, which is not long enough to read.
     const { splashRadius } = shot.tower.definition;
     if (splashRadius > 0) {
-      this.shotGraphics.lineStyle(2, shot.tower.definition.color, 0.55);
-      this.shotGraphics.strokeCircle(shot.target.x, shot.target.y, splashRadius);
+      this.splashRings.show(shot.target.x, shot.target.y, splashRadius, shot.tower.definition.color);
     }
 
     // Floating damage number
