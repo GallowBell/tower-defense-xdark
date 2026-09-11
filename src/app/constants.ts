@@ -40,6 +40,22 @@ export const GAME_COLORS = {
   path: 0xf59e0b,
 } as const;
 
+/**
+ * Draw order for the playfield. Towers and enemies became real game objects
+ * rather than strokes on one shared Graphics layer, so their stacking has to be
+ * declared rather than implied by the order draw calls happen to run in.
+ */
+export const RENDER_DEPTH = {
+  tiles: 0,
+  rangeIndicator: 5,
+  towers: 10,
+  enemies: 20,
+  projectiles: 30,
+  effects: 40,
+  floatingText: 45,
+  overlay: 1000,
+} as const;
+
 export const UI_COPY = {
   menuPrompt: 'Click or press SPACE to deploy.',
   gameplayHint: 'Milestone 0 shell: gameplay systems land next.',

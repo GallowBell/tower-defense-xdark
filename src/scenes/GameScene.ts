@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-import { GAME_COLORS, SCENE_KEYS } from '../app/constants';
+import { GAME_COLORS, RENDER_DEPTH, SCENE_KEYS } from '../app/constants';
 import { MAP_DEFINITIONS, DEFAULT_MAP_ID } from '../data/mapDefinitions';
 import type { MapDefinition } from '../data/mapDefinitions';
 import type { GameStateStore } from '../systems/game-state/GameStateStore';
@@ -9,7 +9,8 @@ import type { ShotEvent } from '../systems/combat/CombatSystem';
 import type { EnemyState } from '../types/enemy';
 import type { TowerArchetype } from '../types/tower';
 import { worldToGrid, tileRect, getTileType } from '../utils/grid';
-import { TowerRenderer } from '../systems/render/TowerRenderer';
+import { TowerView } from '../systems/render/TowerView';
+import { FloatingTextPool } from '../systems/render/FloatingTextPool';
 import { EnemyRenderer } from '../systems/render/EnemyRenderer';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
@@ -38,8 +39,10 @@ export class GameScene extends Phaser.Scene {
   private enemyObjects!: Map<string, Phaser.GameObjects.GameObject>;
 
   // ── Tower visual fields ───────────────────────────────────────────────────
-  private towerRenderer!: TowerRenderer;
+  /** One view per live tower, keyed by uid. */
+  private towerViews!: Map<string, TowerView>;
   private towerGraphics!: Phaser.GameObjects.Graphics;
+  private floatingText!: FloatingTextPool;
 
   // ── Projectile visual fields ──────────────────────────────────────────────
   private projectileSystem!: ProjectileSystem;
@@ -71,6 +74,12 @@ export class GameScene extends Phaser.Scene {
   /** Safety valve so a long frame (tab-out, GC pause) can't spiral. */
   private static readonly MAX_STEPS_PER_FRAME = 8;
   private simAccumulator: number = 0;
+  /**
+   * Seconds the simulation advanced on the last frame. Animations ease over
+   * this rather than wall-clock time, so they track the speed multiplier and
+   * stop dead when the game is paused.
+   */
+  private lastSimulatedSeconds: number = 0;
 
   /** Tower under the pointer, drawn during the render phase. */
   private hoveredTowerUid: string | null = null;
@@ -97,7 +106,9 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.speedMultiplier = 1;
     this.simAccumulator = 0;
+    this.lastSimulatedSeconds = 0;
     this.hoveredTowerUid = null;
+    this.towerViews = new Map();
     this.pauseOverlayObjs = [];
 
     // ── 1. Map ────────────────────────────────────────────────────────────────
@@ -129,10 +140,10 @@ export class GameScene extends Phaser.Scene {
     this.rangeIndicator = this.add.graphics();
 
     // ── 4c. Visual systems ───────────────────────────────────────────────────
-    this.towerRenderer = new TowerRenderer();
     this.projectileSystem = new ProjectileSystem();
-    this.towerGraphics = this.add.graphics();
-    this.projectileGraphics = this.add.graphics();
+    this.towerGraphics = this.add.graphics().setDepth(RENDER_DEPTH.rangeIndicator);
+    this.projectileGraphics = this.add.graphics().setDepth(RENDER_DEPTH.projectiles);
+    this.floatingText = new FloatingTextPool(this);
 
     // ── 4d. Tower selection ───────────────────────────────────────────────────
     this.selectedTowerUid = null;
@@ -189,6 +200,7 @@ export class GameScene extends Phaser.Scene {
           const result = this.sim.placeTower(grid.x, grid.y, this.selectedArchetype);
 
           if (result.success) {
+            this.addTowerView(result.tower!);
             this.soundManager.playUIClick();
             this.selectedTowerUid = null;
             this.registry.set('selectedTowerUid', null);
@@ -204,6 +216,7 @@ export class GameScene extends Phaser.Scene {
 
           if (dist < tower.definition.radius + sellRadius) {
             this.sim.sellTower(tower.uid);
+            this.removeTowerView(tower.uid);
             this.soundManager.playSell();
             if (this.selectedTowerUid === tower.uid) {
               this.selectedTowerUid = null;
@@ -262,6 +275,7 @@ export class GameScene extends Phaser.Scene {
         const newSpeed = this.speedMultiplier === 1 ? 2 : 1;
         this.speedMultiplier = newSpeed;
         this.speedText.setText(`Speed ${newSpeed}x`);
+        this.applyTimeScale();
       });
 
     // Pause button
@@ -289,6 +303,12 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(1001).setVisible(false);
     this.pauseOverlayObjs = [pauseBg, pauseText];
 
+    // ── 8b. Tear-down ─────────────────────────────────────────────────────────
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.floatingText.clear();
+      this.towerViews.clear();
+    });
+
     // ── 9. Launch UIScene ─────────────────────────────────────────────────────
     if (!this.scene.isActive(SCENE_KEYS.UI)) {
       this.scene.launch(SCENE_KEYS.UI);
@@ -302,6 +322,21 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = !this.isPaused;
     this.pauseButton.setText(this.isPaused ? '▶ Resume' : '⏸ Pause');
     this.pauseOverlayObjs.forEach(obj => { obj.visible = this.isPaused; });
+    this.applyTimeScale();
+  }
+
+  /**
+   * Keep Phaser's own clocks in step with the simulation.
+   *
+   * Tweens, timers and emitters run on wall-clock time by default, so at 2x
+   * enemies moved twice as fast while every animation still played at 1x, and
+   * pausing froze the board while damage numbers kept drifting upward.
+   */
+  private applyTimeScale(): void {
+    const scale = this.isPaused ? 0 : this.speedMultiplier;
+    this.tweens.timeScale = scale;
+    this.time.timeScale = scale;
+    this.particleManager.setTimeScale(scale);
   }
 
   // ── Wave control ──────────────────────────────────────────────────────────
@@ -323,7 +358,9 @@ export class GameScene extends Phaser.Scene {
     // CombatSystem.tick() still fired each tower at most once per call.
     this.clearFrameGraphics();
 
-    if (!this.isPaused) {
+    if (this.isPaused) {
+      this.lastSimulatedSeconds = 0;
+    } else {
       // Cap the frame delta so a tab-out or GC pause doesn't bank a huge backlog.
       this.simAccumulator += Math.min(delta / 1000, 0.25) * this.speedMultiplier;
 
@@ -340,11 +377,13 @@ export class GameScene extends Phaser.Scene {
       // Hit the safety valve: drop the backlog rather than replaying it forever.
       if (steps === GameScene.MAX_STEPS_PER_FRAME) this.simAccumulator = 0;
 
+      this.lastSimulatedSeconds = steps * GameScene.SIM_STEP;
+
       // Projectiles are decoration, so they animate once per frame over however
       // much time the simulation actually advanced.
       if (steps > 0) {
         this.projectileSystem.update(
-          steps * GameScene.SIM_STEP,
+          this.lastSimulatedSeconds,
           this.sim.enemies.map(e => ({ uid: e.uid, x: e.x, y: e.y, dead: e.dead })),
         );
       }
@@ -359,6 +398,43 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.store.gameState === 'victory') {
       this.showOverlay('VICTORY!', 0x22c55e);
+    }
+  }
+
+  // ── Tower views ────────────────────────────────────────────────────────────
+
+  private addTowerView(tower: typeof this.store.towers[number]): void {
+    const color = this.skinManager.resolveTowerColor(tower.archetype, tower.definition.color);
+    this.towerViews.set(tower.uid, new TowerView(this, tower, color));
+  }
+
+  private removeTowerView(uid: string): void {
+    this.towerViews.get(uid)?.destroy();
+    this.towerViews.delete(uid);
+  }
+
+  /**
+   * Point every tower at what it is tracking.
+   *
+   * Aiming is eased over time, so it uses the frame's simulated seconds rather
+   * than raw wall-clock: at 2x the turret has to keep up with the enemies.
+   */
+  private syncTowerViews(): void {
+    const dt = this.lastSimulatedSeconds;
+
+    for (const tower of this.store.towers) {
+      // A tower can exist without a view after a restart mid-run.
+      let view = this.towerViews.get(tower.uid);
+      if (!view) {
+        this.addTowerView(tower);
+        view = this.towerViews.get(tower.uid)!;
+      }
+
+      const target = tower.targetUid
+        ? this.sim.enemies.find(e => e.uid === tower.targetUid && !e.dead) ?? null
+        : null;
+
+      view.sync(tower, target, dt);
     }
   }
 
@@ -421,23 +497,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Floating damage number
-    const dmgStr = shot.wasCrit ? `CRIT! ${shot.damageDealt}` : `${shot.damageDealt}`;
-    const dmgText = this.add.text(shot.target.x, shot.target.y, dmgStr, {
-      color: shot.wasCrit ? '#ffd700' : '#ffffff',
-      fontFamily: 'Arial',
-      fontSize: shot.wasCrit ? '18px' : '14px',
-      fontStyle: shot.wasCrit ? 'bold' : 'normal',
-      stroke: '#000000',
-      strokeThickness: 2,
-    }).setOrigin(0.5);
-
-    this.tweens.add({
-      targets: dmgText,
-      y: dmgText.y - 40,
-      alpha: 0,
-      duration: 800,
-      onComplete: () => dmgText.destroy(),
-    });
+    this.floatingText.show(
+      shot.target.x,
+      shot.target.y,
+      shot.wasCrit ? `CRIT! ${shot.damageDealt}` : `${shot.damageDealt}`,
+      shot.wasCrit ? '#ffd700' : '#ffffff',
+      shot.wasCrit,
+    );
   }
 
   /**
@@ -467,8 +533,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Draw towers
-    this.towerRenderer.draw(this.towerGraphics, this.store.towers, this.skinManager.getTowerColors());
+    // Towers draw themselves — this only steers them.
+    this.syncTowerViews();
 
     // Draw selection ring + range around selected tower
     if (this.selectedTowerUid) {
@@ -524,6 +590,8 @@ export class GameScene extends Phaser.Scene {
     if (this.overlayShown) return;
     this.overlayShown = true;
     this.isPaused = false;
+    this.speedMultiplier = 1;
+    this.applyTimeScale();
     this.selectedTowerUid = null;
     this.registry.set('selectedTowerUid', null);
 

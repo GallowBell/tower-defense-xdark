@@ -36,8 +36,9 @@ export class CombatSystem {
    *
    * For each tower:
    *   1. Decrement tower.cooldown by dt (clamp to 0)
-   *   2. If cooldown > 0: skip (tower still reloading)
-   *   3. Find target via TargetingSystem.findTarget()
+   *   2. Find a target via TargetingSystem.findTarget() and record it on the
+   *      tower as targetUid — every tick, reloading or not
+   *   3. If cooldown > 0: skip (tower still reloading)
    *   4. If target found:
    *      a. Apply damage via DamageSystem.applyHit(), passing the enemy list
    *         so splash towers can catch everything around the target
@@ -55,11 +56,15 @@ export class CombatSystem {
       // Step 1: decrement cooldown, clamp to 0
       tower.cooldown = Math.max(0, tower.cooldown - dt);
 
-      // Step 2: if still reloading, skip
-      if (tower.cooldown > 0) continue;
-
-      // Step 3: find target
+      // Step 2: acquire a target BEFORE the reload check, and remember it.
+      // Renderers aim at tower.targetUid, so it has to stay current while the
+      // tower is reloading — otherwise the barrel tracks a corpse. Targeting is
+      // a distance check per live enemy, so running it every tick is cheap.
       const target = this.targeting.findTarget(tower, enemies);
+      tower.targetUid = target?.uid ?? null;
+
+      // Step 3: if still reloading, or nothing in range, do not fire
+      if (tower.cooldown > 0) continue;
       if (target === null) continue;
 
       // Step 4a: apply damage — the full enemy list feeds splash towers
