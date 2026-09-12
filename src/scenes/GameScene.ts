@@ -12,7 +12,7 @@ import { worldToGrid, tileRect, getTileType } from '../utils/grid';
 import { TowerView } from '../systems/render/TowerView';
 import { FloatingTextPool } from '../systems/render/FloatingTextPool';
 import { SplashRingPool } from '../systems/render/SplashRingPool';
-import { EnemyRenderer } from '../systems/render/EnemyRenderer';
+import { EnemyView } from '../systems/render/EnemyView';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { SkinManager } from '../systems/skins/SkinManager';
@@ -36,8 +36,8 @@ export class GameScene extends Phaser.Scene {
   selectedArchetype: TowerArchetype = 'basic';
 
   // ── Enemy visual fields ───────────────────────────────────────────────────
-  private enemyRenderer!: EnemyRenderer;
-  private enemyObjects!: Map<string, Phaser.GameObjects.GameObject>;
+  /** One view per live enemy, keyed by uid. Dying enemies leave this map. */
+  private enemyViews!: Map<string, EnemyView>;
 
   // ── Tower visual fields ───────────────────────────────────────────────────
   /** One view per live tower, keyed by uid. */
@@ -52,7 +52,6 @@ export class GameScene extends Phaser.Scene {
 
   // ── Combat visual fields ──────────────────────────────────────────────────
   private shotGraphics!: Phaser.GameObjects.Graphics;
-  private hpGraphics!: Phaser.GameObjects.Graphics;
   private rangeIndicator!: Phaser.GameObjects.Graphics;
 
   // ── Upgrade fields ────────────────────────────────────────────────────────
@@ -118,19 +117,18 @@ export class GameScene extends Phaser.Scene {
     this.map = MAP_DEFINITIONS[selectedMapId ?? DEFAULT_MAP_ID];
 
     // ── 2. Enemy rendering ────────────────────────────────────────────────────
-    this.enemyRenderer = new EnemyRenderer();
-    this.enemyObjects = new Map();
+    this.enemyViews = new Map();
 
     // ── 3. The run ────────────────────────────────────────────────────────────
     // Hooks are presentation only — sound, sprites, particles. Every rule that
     // decides the run lives in RunSimulator.
     this.sim = new RunSimulator(this.map, {
-      onSpawn: (enemy) => this.spawnEnemySprite(enemy),
+      onSpawn: (enemy) => this.spawnEnemyView(enemy),
       onShot: (shot) => this.handleShot(shot),
       onLeak: (enemy) => {
         this.soundManager.playEnemyDeath();
         this.particleManager.enemyLeaked(enemy.x, enemy.y);
-        this.retireEnemySprite(enemy.uid);
+        this.retireEnemyView(enemy.uid, 'leak');
       },
       onWaveCleared: () => this.soundManager.playWaveCleared(),
     });
@@ -138,7 +136,6 @@ export class GameScene extends Phaser.Scene {
 
     // ── 4. Combat visuals ─────────────────────────────────────────────────────
     this.shotGraphics = this.add.graphics();
-    this.hpGraphics = this.add.graphics();
     this.rangeIndicator = this.add.graphics();
 
     // ── 4c. Visual systems ───────────────────────────────────────────────────
@@ -312,6 +309,7 @@ export class GameScene extends Phaser.Scene {
       this.floatingText.clear();
       this.splashRings.clear();
       this.towerViews.clear();
+      this.enemyViews.clear();
     });
 
     // ── 9. Launch UIScene ─────────────────────────────────────────────────────
@@ -459,22 +457,29 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Create the sprite for a freshly spawned enemy. */
-  private spawnEnemySprite(enemy: EnemyState): void {
+  /** Create the view for a freshly spawned enemy. */
+  private spawnEnemyView(enemy: EnemyState): void {
     const enemyColor =
       this.skinManager.getEnemyColors()[
         enemy.archetype as keyof ReturnType<typeof this.skinManager.getEnemyColors>
       ] ?? enemy.color;
-    this.enemyObjects.set(enemy.uid, this.enemyRenderer.createObject(this, enemy, enemyColor));
+    this.enemyViews.set(enemy.uid, new EnemyView(this, enemy, enemyColor));
   }
 
-  /** Destroy an enemy's display object and forget it. Safe to call twice. */
-  private retireEnemySprite(uid: string): void {
-    const g = this.enemyObjects.get(uid);
-    if (g) {
-      g.destroy();
-      this.enemyObjects.delete(uid);
-    }
+  /**
+   * Drop an enemy's view and let it play out how it went.
+   *
+   * The view leaves the registry immediately so it stops being synced this
+   * frame — the enemy is gone from the run either way; what differs is whether
+   * the player just earned gold or just lost a life. Safe to call twice: a
+   * splash victim can be reported dead by the same shot that killed the target.
+   */
+  private retireEnemyView(uid: string, how: 'death' | 'leak'): void {
+    const view = this.enemyViews.get(uid);
+    if (!view) return;
+    this.enemyViews.delete(uid);
+    if (how === 'leak') view.playLeak();
+    else view.playDeath();
   }
 
   // ── Combat helpers ────────────────────────────────────────────────────────
@@ -483,15 +488,23 @@ export class GameScene extends Phaser.Scene {
     // The simulator already banked the gold — this just plays the sound.
     if (shot.goldEarned > 0) this.soundManager.playGoldEarned();
 
+    // Everything the shot touched flinches, whether or not it died — that is
+    // what makes the Brute's armour legible: it flashes on every pellet while
+    // its health bar barely moves.
+    this.enemyViews.get(shot.target.uid)?.flashHit();
+    for (const splashed of shot.splashHits) {
+      this.enemyViews.get(splashed.uid)?.flashHit();
+    }
+
     if (shot.killed) {
       this.soundManager.playEnemyDeath();
       this.particleManager.enemyDeath(shot.target);
-      this.retireEnemySprite(shot.target.uid);
+      this.retireEnemyView(shot.target.uid, 'death');
     }
 
     for (const victim of shot.splashKills) {
       this.particleManager.enemyDeath(victim);
-      this.retireEnemySprite(victim.uid);
+      this.retireEnemyView(victim.uid, 'death');
     }
 
     if (!shot.target.dead) {
@@ -538,7 +551,6 @@ export class GameScene extends Phaser.Scene {
    */
   private clearFrameGraphics(): void {
     this.shotGraphics.clear();
-    this.hpGraphics.clear();
     this.towerGraphics.clear();
     this.projectileGraphics.clear();
     this.rangeIndicator.clear();
@@ -583,27 +595,21 @@ export class GameScene extends Phaser.Scene {
       this.projectileGraphics.fillCircle(px, py, 3);
     }
 
-    // Draw HP bars, and keep each sprite on top of its enemy
+    // Enemies draw themselves, health bars included — this only walks them.
+    // Their gait runs off distance covered, so it uses the same simulated
+    // seconds the towers aim on.
+    const dt = this.lastSimulatedSeconds;
     for (const enemy of this.sim.enemies) {
       if (enemy.dead) continue;
 
-      const sprite = this.enemyObjects.get(enemy.uid);
-      if (sprite && 'setPosition' in sprite) {
-        (sprite as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
+      // An enemy can exist without a view after a restart mid-run.
+      let view = this.enemyViews.get(enemy.uid);
+      if (!view) {
+        this.spawnEnemyView(enemy);
+        view = this.enemyViews.get(enemy.uid)!;
       }
 
-      const barWidth = enemy.radius * 2;
-      const barHeight = 4;
-      const barX = enemy.x - enemy.radius;
-      const barY = enemy.y - enemy.radius - 8;
-
-      this.hpGraphics.fillStyle(0x7f1d1d, 1);
-      this.hpGraphics.fillRect(barX, barY, barWidth, barHeight);
-
-      const ratio = enemy.hp / enemy.maxHp;
-      const hpColor = ratio > 0.5 ? 0x22c55e : ratio > 0.25 ? 0xeab308 : 0xef4444;
-      this.hpGraphics.fillStyle(hpColor, 1);
-      this.hpGraphics.fillRect(barX, barY, barWidth * ratio, barHeight);
+      view.sync(enemy, dt);
     }
   }
 
