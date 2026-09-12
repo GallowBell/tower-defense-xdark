@@ -10,9 +10,18 @@ import type { EnemyState } from '../types/enemy';
 import type { TowerArchetype } from '../types/tower';
 import { worldToGrid, tileRect, getTileType } from '../utils/grid';
 import { TowerView } from '../systems/render/TowerView';
+import {
+  TEXTURE_KEYS,
+  pathTileTextureKey,
+  pathVariantAt,
+} from '../systems/render/textures';
 import { FloatingTextPool } from '../systems/render/FloatingTextPool';
-import { EnemyRenderer } from '../systems/render/EnemyRenderer';
+import { BuildGhost } from '../systems/render/BuildGhost';
+import { validatePlacement } from '../systems/placement/PlacementSystem';
+import { SplashRingPool } from '../systems/render/SplashRingPool';
+import { EnemyView } from '../systems/render/EnemyView';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
+import { projectileStyleFor, trailPuff } from '../systems/render/projectileStyle';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { SkinManager } from '../systems/skins/SkinManager';
 import { SoundManager } from '../systems/audio/SoundManager';
@@ -35,14 +44,15 @@ export class GameScene extends Phaser.Scene {
   selectedArchetype: TowerArchetype = 'basic';
 
   // ── Enemy visual fields ───────────────────────────────────────────────────
-  private enemyRenderer!: EnemyRenderer;
-  private enemyObjects!: Map<string, Phaser.GameObjects.GameObject>;
+  /** One view per live enemy, keyed by uid. Dying enemies leave this map. */
+  private enemyViews!: Map<string, EnemyView>;
 
   // ── Tower visual fields ───────────────────────────────────────────────────
   /** One view per live tower, keyed by uid. */
   private towerViews!: Map<string, TowerView>;
   private towerGraphics!: Phaser.GameObjects.Graphics;
   private floatingText!: FloatingTextPool;
+  private splashRings!: SplashRingPool;
 
   // ── Projectile visual fields ──────────────────────────────────────────────
   private projectileSystem!: ProjectileSystem;
@@ -50,7 +60,6 @@ export class GameScene extends Phaser.Scene {
 
   // ── Combat visual fields ──────────────────────────────────────────────────
   private shotGraphics!: Phaser.GameObjects.Graphics;
-  private hpGraphics!: Phaser.GameObjects.Graphics;
   private rangeIndicator!: Phaser.GameObjects.Graphics;
 
   // ── Upgrade fields ────────────────────────────────────────────────────────
@@ -84,6 +93,17 @@ export class GameScene extends Phaser.Scene {
   /** Tower under the pointer, drawn during the render phase. */
   private hoveredTowerUid: string | null = null;
 
+  /** Preview of the tower the player would build where they are pointing. */
+  private buildGhost!: BuildGhost;
+  /**
+   * Last known pointer position in world space.
+   *
+   * Kept rather than read on demand because the preview has to answer to more
+   * than pointer movement: switching archetype with 1/2/3, or earning the gold
+   * mid-wave, both change the verdict without the mouse going anywhere.
+   */
+  private pointerWorld: { x: number; y: number } | null = null;
+
   // ── QoL: Speed control ────────────────────────────────────────────────────
   private speedMultiplier: number = 1;
   private speedText!: Phaser.GameObjects.Text;
@@ -108,6 +128,7 @@ export class GameScene extends Phaser.Scene {
     this.simAccumulator = 0;
     this.lastSimulatedSeconds = 0;
     this.hoveredTowerUid = null;
+    this.pointerWorld = null;
     this.towerViews = new Map();
     this.pauseOverlayObjs = [];
 
@@ -116,19 +137,18 @@ export class GameScene extends Phaser.Scene {
     this.map = MAP_DEFINITIONS[selectedMapId ?? DEFAULT_MAP_ID];
 
     // ── 2. Enemy rendering ────────────────────────────────────────────────────
-    this.enemyRenderer = new EnemyRenderer();
-    this.enemyObjects = new Map();
+    this.enemyViews = new Map();
 
     // ── 3. The run ────────────────────────────────────────────────────────────
     // Hooks are presentation only — sound, sprites, particles. Every rule that
     // decides the run lives in RunSimulator.
     this.sim = new RunSimulator(this.map, {
-      onSpawn: (enemy) => this.spawnEnemySprite(enemy),
+      onSpawn: (enemy) => this.spawnEnemyView(enemy),
       onShot: (shot) => this.handleShot(shot),
       onLeak: (enemy) => {
         this.soundManager.playEnemyDeath();
         this.particleManager.enemyLeaked(enemy.x, enemy.y);
-        this.retireEnemySprite(enemy.uid);
+        this.retireEnemyView(enemy.uid, 'leak');
       },
       onWaveCleared: () => this.soundManager.playWaveCleared(),
     });
@@ -136,7 +156,6 @@ export class GameScene extends Phaser.Scene {
 
     // ── 4. Combat visuals ─────────────────────────────────────────────────────
     this.shotGraphics = this.add.graphics();
-    this.hpGraphics = this.add.graphics();
     this.rangeIndicator = this.add.graphics();
 
     // ── 4c. Visual systems ───────────────────────────────────────────────────
@@ -144,6 +163,8 @@ export class GameScene extends Phaser.Scene {
     this.towerGraphics = this.add.graphics().setDepth(RENDER_DEPTH.rangeIndicator);
     this.projectileGraphics = this.add.graphics().setDepth(RENDER_DEPTH.projectiles);
     this.floatingText = new FloatingTextPool(this);
+    this.splashRings = new SplashRingPool(this);
+    this.buildGhost = new BuildGhost(this);
 
     // ── 4d. Tower selection ───────────────────────────────────────────────────
     this.selectedTowerUid = null;
@@ -167,10 +188,18 @@ export class GameScene extends Phaser.Scene {
         const cx = rect.x + rect.w / 2;
         const cy = rect.y + rect.h / 2;
 
+        // Textured tiles rather than flat rectangles. The colours still come
+        // from GAME_COLORS — the textures are white and carry only the shading.
         if (tileType === 'path') {
-          this.add.rectangle(cx, cy, rect.w, rect.h, GAME_COLORS.path, 0.85);
+          this.add
+            .image(cx, cy, pathTileTextureKey(pathVariantAt(col, row)))
+            .setTint(GAME_COLORS.path)
+            .setDepth(RENDER_DEPTH.tiles);
         } else if (tileType === 'buildable') {
-          this.add.rectangle(cx, cy, rect.w, rect.h, GAME_COLORS.buildZone, 0.35);
+          this.add
+            .image(cx, cy, TEXTURE_KEYS.tileBuild)
+            .setTint(GAME_COLORS.buildZone)
+            .setDepth(RENDER_DEPTH.tiles);
         }
       }
     }
@@ -200,7 +229,7 @@ export class GameScene extends Phaser.Scene {
           const result = this.sim.placeTower(grid.x, grid.y, this.selectedArchetype);
 
           if (result.success) {
-            this.addTowerView(result.tower!);
+            this.addTowerView(result.tower!, true);
             this.soundManager.playUIClick();
             this.selectedTowerUid = null;
             this.registry.set('selectedTowerUid', null);
@@ -216,7 +245,7 @@ export class GameScene extends Phaser.Scene {
 
           if (dist < tower.definition.radius + sellRadius) {
             this.sim.sellTower(tower.uid);
-            this.removeTowerView(tower.uid);
+            this.retireTowerView(tower.uid);
             this.soundManager.playSell();
             if (this.selectedTowerUid === tower.uid) {
               this.selectedTowerUid = null;
@@ -232,6 +261,8 @@ export class GameScene extends Phaser.Scene {
     // Only records what is hovered — drawing happens in drawScene(), because
     // the render phase clears this layer every frame.
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      this.pointerWorld = { x: pointer.worldX, y: pointer.worldY };
+
       const hoverRadius = 20;
       this.hoveredTowerUid = null;
       for (const tower of this.store.towers) {
@@ -255,6 +286,7 @@ export class GameScene extends Phaser.Scene {
       if (!tower || this.sim.upgradeTower(tower.uid) === 0) return;
 
       this.soundManager.playUpgrade();
+      this.towerViews.get(tower.uid)?.playUpgradePop();
       this.particleManager.towerUpgrade(tower.worldX, tower.worldY);
       this.registry.set('selectedTowerUid', this.selectedTowerUid);
     });
@@ -306,7 +338,10 @@ export class GameScene extends Phaser.Scene {
     // ── 8b. Tear-down ─────────────────────────────────────────────────────────
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.floatingText.clear();
+      this.splashRings.clear();
       this.towerViews.clear();
+      this.enemyViews.clear();
+      this.buildGhost.destroy();
     });
 
     // ── 9. Launch UIScene ─────────────────────────────────────────────────────
@@ -401,16 +436,69 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Tower views ────────────────────────────────────────────────────────────
+  /**
+   * Preview the tower that would be built under the cursor.
+   *
+   * Hidden while the pointer is over an existing tower, because that already
+   * shows its own range and the click there selects rather than builds.
+   */
+  private drawBuildGhost(): void {
+    if (!this.pointerWorld || this.isPaused || this.hoveredTowerUid) {
+      this.buildGhost.hide();
+      return;
+    }
 
-  private addTowerView(tower: typeof this.store.towers[number]): void {
-    const color = this.skinManager.resolveTowerColor(tower.archetype, tower.definition.color);
-    this.towerViews.set(tower.uid, new TowerView(this, tower, color));
+    const grid = worldToGrid(this.pointerWorld.x, this.pointerWorld.y);
+    if (!grid) {
+      this.buildGhost.hide();
+      return;
+    }
+
+    const rejection = validatePlacement(
+      this.map,
+      this.store.towers,
+      this.store.gold,
+      this.store.gameState,
+      grid.x,
+      grid.y,
+      this.selectedArchetype,
+    );
+
+    const rect = tileRect(grid.x, grid.y);
+    this.buildGhost.show(
+      rect.x + rect.w / 2,
+      rect.y + rect.h / 2,
+      this.selectedArchetype,
+      rejection,
+    );
   }
 
-  private removeTowerView(uid: string): void {
-    this.towerViews.get(uid)?.destroy();
+  // ── Tower views ────────────────────────────────────────────────────────────
+
+  /**
+   * @param animateIn true when the player just built this tower, so it drops
+   *   in. False on the recovery path below, which is backfilling a view for a
+   *   tower that has been standing there all along.
+   */
+  private addTowerView(tower: typeof this.store.towers[number], animateIn = false): void {
+    const color = this.skinManager.resolveTowerColor(tower.archetype, tower.definition.color);
+    const view = new TowerView(this, tower, color);
+    this.towerViews.set(tower.uid, view);
+    if (animateIn) view.playPlaceIn();
+  }
+
+  /**
+   * Drop a sold tower's view and let it shrink away.
+   *
+   * The view leaves the registry immediately — the tower is already gone from
+   * the simulation, so it must stop being synced this frame, and the tile it
+   * stood on is free to build on again before the animation finishes.
+   */
+  private retireTowerView(uid: string): void {
+    const view = this.towerViews.get(uid);
+    if (!view) return;
     this.towerViews.delete(uid);
+    view.playSellOut();
   }
 
   /**
@@ -438,22 +526,29 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Create the sprite for a freshly spawned enemy. */
-  private spawnEnemySprite(enemy: EnemyState): void {
+  /** Create the view for a freshly spawned enemy. */
+  private spawnEnemyView(enemy: EnemyState): void {
     const enemyColor =
       this.skinManager.getEnemyColors()[
         enemy.archetype as keyof ReturnType<typeof this.skinManager.getEnemyColors>
       ] ?? enemy.color;
-    this.enemyObjects.set(enemy.uid, this.enemyRenderer.createObject(this, enemy, enemyColor));
+    this.enemyViews.set(enemy.uid, new EnemyView(this, enemy, enemyColor));
   }
 
-  /** Destroy an enemy's display object and forget it. Safe to call twice. */
-  private retireEnemySprite(uid: string): void {
-    const g = this.enemyObjects.get(uid);
-    if (g) {
-      g.destroy();
-      this.enemyObjects.delete(uid);
-    }
+  /**
+   * Drop an enemy's view and let it play out how it went.
+   *
+   * The view leaves the registry immediately so it stops being synced this
+   * frame — the enemy is gone from the run either way; what differs is whether
+   * the player just earned gold or just lost a life. Safe to call twice: a
+   * splash victim can be reported dead by the same shot that killed the target.
+   */
+  private retireEnemyView(uid: string, how: 'death' | 'leak'): void {
+    const view = this.enemyViews.get(uid);
+    if (!view) return;
+    this.enemyViews.delete(uid);
+    if (how === 'leak') view.playLeak();
+    else view.playDeath();
   }
 
   // ── Combat helpers ────────────────────────────────────────────────────────
@@ -462,15 +557,23 @@ export class GameScene extends Phaser.Scene {
     // The simulator already banked the gold — this just plays the sound.
     if (shot.goldEarned > 0) this.soundManager.playGoldEarned();
 
+    // Everything the shot touched flinches, whether or not it died — that is
+    // what makes the Brute's armour legible: it flashes on every pellet while
+    // its health bar barely moves.
+    this.enemyViews.get(shot.target.uid)?.flashHit();
+    for (const splashed of shot.splashHits) {
+      this.enemyViews.get(splashed.uid)?.flashHit();
+    }
+
     if (shot.killed) {
       this.soundManager.playEnemyDeath();
       this.particleManager.enemyDeath(shot.target);
-      this.retireEnemySprite(shot.target.uid);
+      this.retireEnemyView(shot.target.uid, 'death');
     }
 
     for (const victim of shot.splashKills) {
       this.particleManager.enemyDeath(victim);
-      this.retireEnemySprite(victim.uid);
+      this.retireEnemyView(victim.uid, 'death');
     }
 
     if (!shot.target.dead) {
@@ -478,10 +581,12 @@ export class GameScene extends Phaser.Scene {
         shot.tower.worldX, shot.tower.worldY,
         { uid: shot.target.uid, x: shot.target.x, y: shot.target.y },
         shot.tower.definition.color,
+        shot.tower.archetype,
       );
     }
 
     this.soundManager.playShoot();
+    this.towerViews.get(shot.tower.uid)?.fire();
     this.particleManager.towerFire(shot.tower.worldX, shot.tower.worldY, shot.tower.definition.color);
     this.shotGraphics.lineStyle(1, 0xffffff, 0.7);
     this.shotGraphics.lineBetween(
@@ -489,11 +594,12 @@ export class GameScene extends Phaser.Scene {
       shot.target.x, shot.target.y,
     );
 
-    // Blast ring, so the player can see what the splash actually covered.
+    // Blast ring, so the player can see what the splash actually covered. It
+    // expands into the real radius over ~a third of a second: stroked straight
+    // onto shotGraphics it lasted one frame, which is not long enough to read.
     const { splashRadius } = shot.tower.definition;
     if (splashRadius > 0) {
-      this.shotGraphics.lineStyle(2, shot.tower.definition.color, 0.55);
-      this.shotGraphics.strokeCircle(shot.target.x, shot.target.y, splashRadius);
+      this.splashRings.show(shot.target.x, shot.target.y, splashRadius, shot.tower.definition.color);
     }
 
     // Floating damage number
@@ -515,7 +621,6 @@ export class GameScene extends Phaser.Scene {
    */
   private clearFrameGraphics(): void {
     this.shotGraphics.clear();
-    this.hpGraphics.clear();
     this.towerGraphics.clear();
     this.projectileGraphics.clear();
     this.rangeIndicator.clear();
@@ -532,6 +637,8 @@ export class GameScene extends Phaser.Scene {
         this.rangeIndicator.fillCircle(hovered.worldX, hovered.worldY, hovered.definition.range);
       }
     }
+
+    this.drawBuildGhost();
 
     // Towers draw themselves — this only steers them.
     this.syncTowerViews();
@@ -552,35 +659,56 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Draw projectiles
+    // Draw projectiles: a head, plus a trail of puffs tapering out behind it.
+    // The trail is derived from the flight line rather than from remembered
+    // positions, so it costs no per-projectile history.
     for (const proj of this.projectileSystem.getAlive()) {
-      const px = proj.startX + (proj.targetX - proj.startX) * proj.progress;
-      const py = proj.startY + (proj.targetY - proj.startY) * proj.progress;
+      const dx = proj.targetX - proj.startX;
+      const dy = proj.targetY - proj.startY;
+      const px = proj.startX + dx * proj.progress;
+      const py = proj.startY + dy * proj.progress;
+
+      const distance = Math.hypot(dx, dy);
+      const style = projectileStyleFor(proj.archetype);
+
+      if (distance > 0) {
+        // Unit vector pointing back down the flight path.
+        const backX = -dx / distance;
+        const backY = -dy / distance;
+        // Never draw trail behind the muzzle it came from.
+        const travelled = distance * proj.progress;
+
+        for (let i = 0; i < style.trailSegments; i++) {
+          const puff = trailPuff(i, style);
+          if (puff.distance > travelled) break;
+          this.projectileGraphics.fillStyle(proj.color, puff.alpha);
+          this.projectileGraphics.fillCircle(
+            px + backX * puff.distance,
+            py + backY * puff.distance,
+            puff.radius,
+          );
+        }
+      }
+
       this.projectileGraphics.fillStyle(proj.color, 1);
-      this.projectileGraphics.fillCircle(px, py, 3);
+      this.projectileGraphics.fillCircle(px, py, style.headRadius);
     }
 
-    // Draw HP bars, and keep each sprite on top of its enemy
+    // Enemies draw themselves, health bars included — this only walks them.
+    // Their gait runs off distance covered, so it uses the same simulated
+    // seconds the towers aim on.
+    const dt = this.lastSimulatedSeconds;
     for (const enemy of this.sim.enemies) {
       if (enemy.dead) continue;
 
-      const sprite = this.enemyObjects.get(enemy.uid);
-      if (sprite && 'setPosition' in sprite) {
-        (sprite as unknown as { setPosition(x: number, y: number): void }).setPosition(enemy.x, enemy.y);
+      // An enemy can exist without a view after a restart mid-run.
+      let view = this.enemyViews.get(enemy.uid);
+      if (!view) {
+        this.spawnEnemyView(enemy);
+        view = this.enemyViews.get(enemy.uid)!;
       }
 
-      const barWidth = enemy.radius * 2;
-      const barHeight = 4;
-      const barX = enemy.x - enemy.radius;
-      const barY = enemy.y - enemy.radius - 8;
-
-      this.hpGraphics.fillStyle(0x7f1d1d, 1);
-      this.hpGraphics.fillRect(barX, barY, barWidth, barHeight);
-
-      const ratio = enemy.hp / enemy.maxHp;
-      const hpColor = ratio > 0.5 ? 0x22c55e : ratio > 0.25 ? 0xeab308 : 0xef4444;
-      this.hpGraphics.fillStyle(hpColor, 1);
-      this.hpGraphics.fillRect(barX, barY, barWidth * ratio, barHeight);
+      view.sync(enemy, dt);
     }
   }
 

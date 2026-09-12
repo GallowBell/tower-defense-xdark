@@ -1,3 +1,6 @@
+import type { TowerArchetype } from '../../types/tower';
+import { projectileStyleFor } from './projectileStyle';
+
 export interface Projectile {
   uid: string;
   startX: number;
@@ -8,6 +11,8 @@ export interface Projectile {
   progress: number; // 0..1 along the path
   speed: number; // units per second (e.g. 500 px/s)
   color: number; // color of the projectile dot
+  /** Which tower fired it — selects the head, trail and speed it renders with. */
+  archetype: TowerArchetype;
   alive: boolean;
 }
 
@@ -33,6 +38,7 @@ export class ProjectileSystem {
    * @param sy — source y (tower)
    * @param target — the target enemy's current state
    * @param color — color of the projectile dot
+   * @param archetype — the firing tower's archetype, which fixes its speed and look
    * @returns the created projectile uid
    */
   fire(
@@ -40,6 +46,7 @@ export class ProjectileSystem {
     sy: number,
     target: { uid: string; x: number; y: number },
     color: number,
+    archetype: TowerArchetype,
   ): string {
     const uid = `proj_${this.nextUid++}`;
     this.projectiles.push({
@@ -50,8 +57,9 @@ export class ProjectileSystem {
       targetY: target.y,
       targetUid: target.uid,
       progress: 0,
-      speed: 500,
+      speed: projectileStyleFor(archetype).speed,
       color,
+      archetype,
       alive: true,
     });
     return uid;
