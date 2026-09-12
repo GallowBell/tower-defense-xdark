@@ -307,6 +307,18 @@ export class GameScene extends Phaser.Scene {
       this.registry.set('selectedTowerUid', this.selectedTowerUid);
     });
 
+    // ── 6e. Targeting hotkey [T] ─────────────────────────────────────────────
+    // Free and instant, unlike [U]: retargeting is a standing order, not a
+    // purchase, so it works mid-wave and costs nothing.
+    this.input.keyboard?.on('keydown-T', () => {
+      if (this.isPaused || !this.selectedTowerUid) return;
+      if (this.sim.cycleTargetingMode(this.selectedTowerUid) === null) return;
+
+      this.soundManager.playUIClick();
+      // Nudge the registry so UIScene repaints the panel this frame.
+      this.registry.set('selectedTowerUid', this.selectedTowerUid);
+    });
+
     // ── 7. Top bar controls ──────────────────────────────────────────────────
     const btnStyle: Phaser.Types.GameObjects.Text.TextStyle = {
       color: '#f8fafc',

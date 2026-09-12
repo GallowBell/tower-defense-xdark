@@ -2,6 +2,18 @@
 
 export type TowerArchetype = 'basic' | 'fast' | 'heavy';
 
+/**
+ * Which enemy a tower prefers when several are in range.
+ *
+ * - `first`     — furthest along the path. The default, and the right answer
+ *                 most of the time: it kills what is closest to leaking.
+ * - `last`      — least far along, for softening a wave before it arrives.
+ * - `closest`   — nearest the tower, which maximises time-on-target.
+ * - `strongest` — toughest enemy type by max HP, to focus a Brute instead of
+ *                 chipping whatever wandered in front of it.
+ */
+export type TargetingMode = 'first' | 'last' | 'closest' | 'strongest';
+
 export interface TowerDefinition {
   id: TowerArchetype;
   displayName: string;
@@ -35,6 +47,8 @@ export interface TowerState {
    * pointing at a live target instead of at whatever it last shot.
    */
   targetUid: string | null;
+  /** Which enemy this tower prefers when several are in range. */
+  targetingMode: TargetingMode;
   /** Upgrade level (1-based) */
   level: number;
   /** Total gold sunk into this tower: purchase price plus every upgrade paid for. */

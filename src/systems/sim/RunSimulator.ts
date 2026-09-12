@@ -7,6 +7,8 @@ import { WaveSystem } from '../waves/WaveSystem';
 import { WAVE_DEFINITIONS } from '../waves/waveDefinitions';
 import type { WaveDefinition } from '../waves/waveDefinitions';
 import { CombatSystem } from '../combat/CombatSystem';
+import { nextTargetingMode } from '../combat/TargetingSystem';
+import type { TargetingMode } from '../../types/tower';
 import type { ShotEvent } from '../combat/CombatSystem';
 import { TowerUpgradeSystem } from '../upgrade/TowerUpgradeSystem';
 import { DIFFICULTY } from '../../data/difficultyScaling';
@@ -134,6 +136,32 @@ export class RunSimulator {
     if (!this.store.spendGold(cost)) return 0;
     this.upgrades.applyUpgrade(tower);
     return cost;
+  }
+
+  /**
+   * Move a tower to the next targeting mode.
+   *
+   * Free and instant — it is a standing order, not a purchase, so it works
+   * mid-wave and costs nothing. That is the point: retargeting is how you
+   * answer a wave you did not expect, without rebuilding.
+   *
+   * @returns the tower's new mode, or null when no such tower exists.
+   */
+  cycleTargetingMode(uid: string): TargetingMode | null {
+    const tower = this.store.towers.find((t) => t.uid === uid);
+    if (!tower) return null;
+
+    tower.targetingMode = nextTargetingMode(tower.targetingMode);
+    return tower.targetingMode;
+  }
+
+  /** Set a tower's targeting mode outright. @returns false if no such tower. */
+  setTargetingMode(uid: string, mode: TargetingMode): boolean {
+    const tower = this.store.towers.find((t) => t.uid === uid);
+    if (!tower) return false;
+
+    tower.targetingMode = mode;
+    return true;
   }
 
   /** Send the next wave. @returns false when no wave can start right now. */
