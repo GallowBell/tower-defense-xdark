@@ -18,7 +18,13 @@ export class FloatingTextPool {
   }
 
   /** Float a number up from (x, y) and fade it out. */
-  show(x: number, y: number, message: string, color: string, emphasised: boolean): void {
+  show(
+    x: number,
+    y: number,
+    message: string,
+    color: string,
+    emphasised: boolean,
+  ): void {
     const text = this.idle.pop() ?? this.create();
 
     text

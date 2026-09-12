@@ -4,7 +4,11 @@ import { RENDER_DEPTH } from '../../app/constants';
 import { TOWER_DEFINITIONS } from '../../entities/towers/towerDefinitions';
 import type { TowerArchetype } from '../../types/tower';
 import type { PlacementRejection } from '../placement/PlacementSystem';
-import { towerBaseTextureKey, towerBarrelTextureKey, baseScaleFor } from './textures';
+import {
+  towerBaseTextureKey,
+  towerBarrelTextureKey,
+  baseScaleFor,
+} from './textures';
 
 /** Tint for a tile the tower can go on. */
 const VALID_COLOR = 0x4ade80;
@@ -31,7 +35,10 @@ export class BuildGhost {
   private rangeSignature = '';
 
   constructor(scene: Phaser.Scene) {
-    this.range = scene.add.graphics().setDepth(RENDER_DEPTH.rangeIndicator).setVisible(false);
+    this.range = scene.add
+      .graphics()
+      .setDepth(RENDER_DEPTH.rangeIndicator)
+      .setVisible(false);
 
     this.barrel = scene.add
       .image(0, 0, towerBarrelTextureKey('basic'))

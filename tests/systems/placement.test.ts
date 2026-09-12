@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import type { MapDefinition } from '../../src/data/mapDefinitions';
 import type { TowerState } from '../../src/types/tower';
-import { PlacementSystem, validatePlacement } from '../../src/systems/placement/PlacementSystem';
+import {
+  PlacementSystem,
+  validatePlacement,
+} from '../../src/systems/placement/PlacementSystem';
 import { GameStateStore } from '../../src/systems/game-state/GameStateStore';
 import { BALANCE } from '../../src/data/balance';
 
@@ -67,7 +70,15 @@ describe('PlacementSystem', () => {
   });
 
   it('allows placement when gameState is wave_cleared', () => {
-    const result = ps.attempt(MOCK_MAP, NO_TOWERS, 200, 'wave_cleared', 2, 2, 'basic');
+    const result = ps.attempt(
+      MOCK_MAP,
+      NO_TOWERS,
+      200,
+      'wave_cleared',
+      2,
+      2,
+      'basic',
+    );
     expect(result.success).toBe(true);
   });
 
@@ -75,25 +86,57 @@ describe('PlacementSystem', () => {
 
   it('allows building during an active wave', () => {
     // Reacting to a leak in progress is the point — see BUILDABLE_STATES.
-    const result = ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'wave_active', 2, 2, 'basic');
+    const result = ps.attempt(
+      MOCK_MAP,
+      NO_TOWERS,
+      500,
+      'wave_active',
+      2,
+      2,
+      'basic',
+    );
     expect(result.success).toBe(true);
     expect(result.tower).toBeDefined();
   });
 
   it('returns invalid_state when gameState is placing', () => {
-    const result = ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'placing', 2, 2, 'basic');
+    const result = ps.attempt(
+      MOCK_MAP,
+      NO_TOWERS,
+      500,
+      'placing',
+      2,
+      2,
+      'basic',
+    );
     expect(result.success).toBe(false);
     expect(result.reason).toBe('invalid_state');
   });
 
   it('returns invalid_state when gameState is game_over', () => {
-    const result = ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'game_over', 2, 2, 'basic');
+    const result = ps.attempt(
+      MOCK_MAP,
+      NO_TOWERS,
+      500,
+      'game_over',
+      2,
+      2,
+      'basic',
+    );
     expect(result.success).toBe(false);
     expect(result.reason).toBe('invalid_state');
   });
 
   it('returns invalid_state when gameState is victory', () => {
-    const result = ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'victory', 2, 2, 'basic');
+    const result = ps.attempt(
+      MOCK_MAP,
+      NO_TOWERS,
+      500,
+      'victory',
+      2,
+      2,
+      'basic',
+    );
     expect(result.success).toBe(false);
     expect(result.reason).toBe('invalid_state');
   });
@@ -113,7 +156,15 @@ describe('PlacementSystem', () => {
   });
 
   it('returns not_buildable for out-of-bounds coords', () => {
-    const result = ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'idle', 99, 99, 'basic');
+    const result = ps.attempt(
+      MOCK_MAP,
+      NO_TOWERS,
+      500,
+      'idle',
+      99,
+      99,
+      'basic',
+    );
     expect(result.success).toBe(false);
     expect(result.reason).toBe('not_buildable');
   });
@@ -124,7 +175,15 @@ describe('PlacementSystem', () => {
     const first = ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'idle', 2, 2, 'basic');
     expect(first.success).toBe(true);
     // Place second tower at same tile using the first result in existingTowers
-    const second = ps.attempt(MOCK_MAP, [first.tower!], 500, 'idle', 2, 2, 'basic');
+    const second = ps.attempt(
+      MOCK_MAP,
+      [first.tower!],
+      500,
+      'idle',
+      2,
+      2,
+      'basic',
+    );
     expect(second.success).toBe(false);
     expect(second.reason).toBe('occupied');
   });
@@ -359,11 +418,24 @@ describe('validatePlacement agrees with attempt', () => {
    * archetype and holds them to the same answer.
    */
   it('returns exactly the reason attempt would, across the whole board', () => {
-    const states = ['idle', 'wave_cleared', 'wave_active', 'placing', 'game_over', 'victory'] as const;
+    const states = [
+      'idle',
+      'wave_cleared',
+      'wave_active',
+      'placing',
+      'game_over',
+      'victory',
+    ] as const;
     const archetypes = ['basic', 'fast', 'heavy'] as const;
     const golds = [0, 80, 120, 500];
     const occupied = new PlacementSystem().attempt(
-      MOCK_MAP, NO_TOWERS, 500, 'idle', 4, 4, 'basic',
+      MOCK_MAP,
+      NO_TOWERS,
+      500,
+      'idle',
+      4,
+      4,
+      'basic',
     ).tower!;
 
     let compared = 0;
@@ -375,14 +447,28 @@ describe('validatePlacement agrees with attempt', () => {
               // A fresh system each time: attempt mints a uid on success, so a
               // shared one would drift while validatePlacement stays pure.
               const result = new PlacementSystem().attempt(
-                MOCK_MAP, [occupied], gold, state, x, y, archetype,
+                MOCK_MAP,
+                [occupied],
+                gold,
+                state,
+                x,
+                y,
+                archetype,
               );
               const rejection = validatePlacement(
-                MOCK_MAP, [occupied], gold, state, x, y, archetype,
+                MOCK_MAP,
+                [occupied],
+                gold,
+                state,
+                x,
+                y,
+                archetype,
               );
 
-              expect(rejection, `${state}/${archetype}/${gold}g @${x},${y}`)
-                .toBe(result.success ? null : result.reason);
+              expect(
+                rejection,
+                `${state}/${archetype}/${gold}g @${x},${y}`,
+              ).toBe(result.success ? null : result.reason);
               compared++;
             }
           }
@@ -391,7 +477,9 @@ describe('validatePlacement agrees with attempt', () => {
     }
 
     // Guard against the loops silently collapsing to nothing.
-    expect(compared).toBe(states.length * archetypes.length * golds.length * 36);
+    expect(compared).toBe(
+      states.length * archetypes.length * golds.length * 36,
+    );
   });
 
   it('builds nothing and mints no uid when only previewing', () => {
@@ -402,16 +490,33 @@ describe('validatePlacement agrees with attempt', () => {
       validatePlacement(MOCK_MAP, NO_TOWERS, 500, 'idle', 2, 2, 'basic');
     }
 
-    expect(ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'idle', 2, 2, 'basic').tower!.uid)
-      .toBe('tower_0');
+    expect(
+      ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'idle', 2, 2, 'basic').tower!.uid,
+    ).toBe('tower_0');
   });
 
   it('reports the same precedence of reasons that attempt does', () => {
     // A path tile the player also cannot afford is refused for being a path,
     // in both paths through the code.
     const gold = 0;
-    const rejection = validatePlacement(MOCK_MAP, NO_TOWERS, gold, 'idle', 3, 0, 'basic');
-    const result = new PlacementSystem().attempt(MOCK_MAP, NO_TOWERS, gold, 'idle', 3, 0, 'basic');
+    const rejection = validatePlacement(
+      MOCK_MAP,
+      NO_TOWERS,
+      gold,
+      'idle',
+      3,
+      0,
+      'basic',
+    );
+    const result = new PlacementSystem().attempt(
+      MOCK_MAP,
+      NO_TOWERS,
+      gold,
+      'idle',
+      3,
+      0,
+      'basic',
+    );
 
     expect(rejection).toBe('not_buildable');
     expect(result.reason).toBe('not_buildable');

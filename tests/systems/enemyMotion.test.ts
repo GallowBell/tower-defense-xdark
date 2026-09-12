@@ -73,7 +73,9 @@ describe('gait cadence', () => {
   });
 
   it('staggers spawns so a pack does not march in lockstep', () => {
-    const phases = new Set(Array.from({ length: 20 }, () => restingEnemyMotion().walkPhase));
+    const phases = new Set(
+      Array.from({ length: 20 }, () => restingEnemyMotion().walkPhase),
+    );
     expect(phases.size).toBeGreaterThan(1);
   });
 });
@@ -96,9 +98,15 @@ describe('gait pose', () => {
     // Quarter and three-quarter phase are the two peaks; 0 and 0.5 are the
     // two rest points between them.
     expect(walkBounce(0, profile)).toBeCloseTo(1, 10);
-    expect(walkBounce(0.25, profile)).toBeCloseTo(1 + profile.bounceAmplitude, 10);
+    expect(walkBounce(0.25, profile)).toBeCloseTo(
+      1 + profile.bounceAmplitude,
+      10,
+    );
     expect(walkBounce(0.5, profile)).toBeCloseTo(1, 10);
-    expect(walkBounce(0.75, profile)).toBeCloseTo(1 + profile.bounceAmplitude, 10);
+    expect(walkBounce(0.75, profile)).toBeCloseTo(
+      1 + profile.bounceAmplitude,
+      10,
+    );
   });
 
   it('sways to both sides, once per cycle', () => {
@@ -112,14 +120,18 @@ describe('gait pose', () => {
     const state = restingEnemyMotion(0);
     for (let i = 0; i < 300; i++) {
       advanceEnemyMotion(state, 2.1, STEP, profile);
-      expect(Math.abs(walkSway(state.walkPhase, profile))).toBeLessThanOrEqual(profile.swayAmplitude);
+      expect(Math.abs(walkSway(state.walkPhase, profile))).toBeLessThanOrEqual(
+        profile.swayAmplitude,
+      );
     }
   });
 
   it('gives the heaviest enemy the longest stride and the biggest swell', () => {
     expect(WALK.tank.strideLength).toBeGreaterThan(WALK.basic.strideLength);
     expect(WALK.basic.strideLength).toBeGreaterThan(WALK.fast.strideLength);
-    expect(WALK.tank.bounceAmplitude).toBeGreaterThan(WALK.fast.bounceAmplitude);
+    expect(WALK.tank.bounceAmplitude).toBeGreaterThan(
+      WALK.fast.bounceAmplitude,
+    );
   });
 });
 
@@ -180,7 +192,7 @@ describe('armour is visible where it exists', () => {
   it('marks exactly the enemies that actually blunt damage', () => {
     // EnemyView draws plating from `armor > 0` rather than from the archetype,
     // so this is the assertion that the plating appears on the right enemy.
-    const armoured = ARCHETYPES.filter(a => ENEMY_DEFINITIONS[a].armor > 0);
+    const armoured = ARCHETYPES.filter((a) => ENEMY_DEFINITIONS[a].armor > 0);
     expect(armoured).toEqual(['tank']);
   });
 });

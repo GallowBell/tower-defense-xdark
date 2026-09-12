@@ -1,4 +1,8 @@
-import type { TowerArchetype, TowerState, TowerDefinition } from '../../types/tower';
+import type {
+  TowerArchetype,
+  TowerState,
+  TowerDefinition,
+} from '../../types/tower';
 import type { MapDefinition } from '../../data/mapDefinitions';
 import type { GameState, Vec2 } from '../../types/game';
 import { isBuildable, gridToWorld } from '../../utils/grid';
@@ -39,7 +43,8 @@ export function validatePlacement(
 ): PlacementRejection | null {
   if (!BUILDABLE_STATES.includes(gameState)) return 'invalid_state';
   if (!isBuildable(map, gridX, gridY)) return 'not_buildable';
-  if (existingTowers.some(t => t.gridX === gridX && t.gridY === gridY)) return 'occupied';
+  if (existingTowers.some((t) => t.gridX === gridX && t.gridY === gridY))
+    return 'occupied';
   if (gold < TOWER_DEFINITIONS[archetype].cost) return 'insufficient_gold';
   return null;
 }
@@ -50,7 +55,11 @@ export function validatePlacement(
  * 'wave_active' is included deliberately: gold earned mid-wave used to be dead
  * weight until the wave ended, and a leak was something you could only watch.
  */
-const BUILDABLE_STATES: readonly GameState[] = ['idle', 'wave_cleared', 'wave_active'];
+const BUILDABLE_STATES: readonly GameState[] = [
+  'idle',
+  'wave_cleared',
+  'wave_active',
+];
 
 export class PlacementSystem {
   private nextUid = 0;
@@ -66,7 +75,13 @@ export class PlacementSystem {
     archetype: TowerArchetype,
   ): PlacementResult {
     const rejection = validatePlacement(
-      map, existingTowers, gold, gameState, gridX, gridY, archetype,
+      map,
+      existingTowers,
+      gold,
+      gameState,
+      gridX,
+      gridY,
+      archetype,
     );
     if (rejection !== null) return { success: false, reason: rejection };
 

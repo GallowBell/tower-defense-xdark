@@ -1,4 +1,9 @@
-import { APP_DIMENSIONS, APP_TITLE, GAME_COLORS, HUD_DEFAULTS } from './constants';
+import {
+  APP_DIMENSIONS,
+  APP_TITLE,
+  GAME_COLORS,
+  HUD_DEFAULTS,
+} from './constants';
 
 export const GAME_PARENT_ID = 'game-root';
 

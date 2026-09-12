@@ -48,28 +48,35 @@ export class MenuScene extends Phaser.Scene {
       const cx = startX + i * (cardWidth + gap);
       const cy = cardY;
 
-      const card = this.add.rectangle(cx, cy, cardWidth, cardHeight, 0x1e293b, 1)
+      const card = this.add
+        .rectangle(cx, cy, cardWidth, cardHeight, 0x1e293b, 1)
         .setStrokeStyle(2, 0x3b82f6, 0.6)
         .setInteractive({ useHandCursor: true });
 
-      this.add.text(cx, cy - 40, mapDef.displayName, {
-        color: GAME_COLORS.text,
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '22px',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
+      this.add
+        .text(cx, cy - 40, mapDef.displayName, {
+          color: GAME_COLORS.text,
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '22px',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5);
 
-      this.add.text(cx, cy + 10, `Map: ${mapDef.id}`, {
-        color: GAME_COLORS.mutedText,
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '16px',
-      }).setOrigin(0.5);
+      this.add
+        .text(cx, cy + 10, `Map: ${mapDef.id}`, {
+          color: GAME_COLORS.mutedText,
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '16px',
+        })
+        .setOrigin(0.5);
 
-      this.add.text(cx, cy + 40, `${mapDef.waypoints.length - 1} segments`, {
-        color: '#94a3b8',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '14px',
-      }).setOrigin(0.5);
+      this.add
+        .text(cx, cy + 40, `${mapDef.waypoints.length - 1} segments`, {
+          color: '#94a3b8',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '14px',
+        })
+        .setOrigin(0.5);
 
       card.on('pointerover', () => {
         card.setFillStyle(0x334155, 1);
@@ -96,14 +103,15 @@ export class MenuScene extends Phaser.Scene {
 
     // Restore previously selected theme
     const savedTheme = this.registry.get('selectedTheme') as string | null;
-    if (savedTheme && THEMES.some(t => t.id === savedTheme)) {
+    if (savedTheme && THEMES.some((t) => t.id === savedTheme)) {
       this.selectedThemeId = savedTheme;
     }
 
     const themeCardW = 150;
     const themeCardH = 70;
     const themeGap = 16;
-    const themeRowWidth = THEMES.length * themeCardW + (THEMES.length - 1) * themeGap;
+    const themeRowWidth =
+      THEMES.length * themeCardW + (THEMES.length - 1) * themeGap;
     const themeStartX = (width - themeRowWidth) / 2 + themeCardW / 2;
     const themeY = height * 0.82;
 
@@ -113,17 +121,24 @@ export class MenuScene extends Phaser.Scene {
 
       const isSelected = theme.id === this.selectedThemeId;
 
-      const card = this.add.rectangle(cx, cy, themeCardW, themeCardH, 0x1e293b, 1)
-        .setStrokeStyle(isSelected ? 2 : 1, isSelected ? 0x7c3aed : 0x334155, isSelected ? 1 : 0.5)
+      const card = this.add
+        .rectangle(cx, cy, themeCardW, themeCardH, 0x1e293b, 1)
+        .setStrokeStyle(
+          isSelected ? 2 : 1,
+          isSelected ? 0x7c3aed : 0x334155,
+          isSelected ? 1 : 0.5,
+        )
         .setInteractive({ useHandCursor: true });
 
       // Theme name
-      this.add.text(cx, cy - 14, theme.displayName, {
-        color: GAME_COLORS.text,
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '12px',
-        fontStyle: isSelected ? 'bold' : 'normal',
-      }).setOrigin(0.5);
+      this.add
+        .text(cx, cy - 14, theme.displayName, {
+          color: GAME_COLORS.text,
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '12px',
+          fontStyle: isSelected ? 'bold' : 'normal',
+        })
+        .setOrigin(0.5);
 
       // Color swatches: tower colors (3 small circles)
       const towerColors = Object.values(theme.towerColors);
@@ -132,14 +147,18 @@ export class MenuScene extends Phaser.Scene {
       const swatchR = 6;
 
       // Label
-      this.add.text(cx - 40, swatchY, '🏰', { fontSize: '10px' }).setOrigin(0.5);
+      this.add
+        .text(cx - 40, swatchY, '🏰', { fontSize: '10px' })
+        .setOrigin(0.5);
       towerColors.forEach((c, ci) => {
         const sx = cx + (ci - 1) * 14;
         this.add.circle(sx, swatchY, swatchR, c);
       });
 
       // Enemy swatches
-      this.add.text(cx - 40, swatchY + 16, '👾', { fontSize: '10px' }).setOrigin(0.5);
+      this.add
+        .text(cx - 40, swatchY + 16, '👾', { fontSize: '10px' })
+        .setOrigin(0.5);
       enemyColors.forEach((c, ci) => {
         const sx = cx + (ci - 1) * 14;
         this.add.circle(sx, swatchY + 16, swatchR, c);

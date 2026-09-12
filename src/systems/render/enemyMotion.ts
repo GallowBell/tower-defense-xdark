@@ -78,7 +78,7 @@ export function advanceEnemyMotion(
   // Wrap only when the phase actually leaves 0..1, so a frame in which nothing
   // moved leaves the state genuinely untouched.
   const phase = state.walkPhase + distance / profile.strideLength;
-  state.walkPhase = phase >= 0 && phase < 1 ? phase : (((phase % 1) + 1) % 1);
+  state.walkPhase = phase >= 0 && phase < 1 ? phase : ((phase % 1) + 1) % 1;
 }
 
 /**
@@ -89,7 +89,9 @@ export function advanceEnemyMotion(
  * highest: weight fully committed to one foot.
  */
 export function walkBounce(walkPhase: number, profile: WalkProfile): number {
-  return 1 + Math.abs(Math.sin(walkPhase * Math.PI * 2)) * profile.bounceAmplitude;
+  return (
+    1 + Math.abs(Math.sin(walkPhase * Math.PI * 2)) * profile.bounceAmplitude
+  );
 }
 
 /** Side-to-side sway, in pixels, once per cycle — weight shifting foot to foot. */
@@ -108,7 +110,11 @@ export function flashStrength(flashLife: number): number {
  * A stationary enemy has no direction to infer, and snapping to 0 would spin
  * everything to face right the moment the game pauses.
  */
-export function desiredFacing(dx: number, dy: number, fallback: number): number {
+export function desiredFacing(
+  dx: number,
+  dy: number,
+  fallback: number,
+): number {
   // Well under a pixel, but above the float noise of a position that only
   // looks unchanged.
   if (dx * dx + dy * dy < 1e-6) return fallback;

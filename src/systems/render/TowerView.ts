@@ -97,7 +97,12 @@ export class TowerView {
     // it points with. The flash sits on top of both — it is the brightest
     // thing on screen for the frames it exists.
     this.container = scene.add
-      .container(tower.worldX, tower.worldY, [this.barrel, this.base, this.flash, this.pips])
+      .container(tower.worldX, tower.worldY, [
+        this.barrel,
+        this.base,
+        this.flash,
+        this.pips,
+      ])
       .setDepth(RENDER_DEPTH.towers);
 
     this.drawPips(tower);
@@ -110,10 +115,23 @@ export class TowerView {
    * @param dtSeconds frame time already scaled by the game's speed multiplier,
    *   so aiming keeps pace when the player runs at 2x.
    */
-  sync(tower: TowerState, target: { x: number; y: number } | null, dtSeconds: number): void {
+  sync(
+    tower: TowerState,
+    target: { x: number; y: number } | null,
+    dtSeconds: number,
+  ): void {
     if (target) {
-      const desired = Phaser.Math.Angle.Between(tower.worldX, tower.worldY, target.x, target.y);
-      this.facing = Phaser.Math.Angle.RotateTo(this.facing, desired, TURN_RATE * dtSeconds);
+      const desired = Phaser.Math.Angle.Between(
+        tower.worldX,
+        tower.worldY,
+        target.x,
+        target.y,
+      );
+      this.facing = Phaser.Math.Angle.RotateTo(
+        this.facing,
+        desired,
+        TURN_RATE * dtSeconds,
+      );
     }
 
     advanceMotion(this.motionState, dtSeconds, this.motion);

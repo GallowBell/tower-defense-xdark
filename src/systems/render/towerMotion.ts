@@ -36,9 +36,24 @@ export interface MotionProfile {
  * Gunner twitches, the Cannon heaves.
  */
 export const MOTION: Record<TowerArchetype, MotionProfile> = {
-  basic: { recoilDistance: 4, recoilRecovery: 0.22, bobPeriod: 1.7, bobAmplitude: 0.9 },
-  fast: { recoilDistance: 2.5, recoilRecovery: 0.1, bobPeriod: 1.0, bobAmplitude: 0.6 },
-  heavy: { recoilDistance: 7, recoilRecovery: 0.34, bobPeriod: 2.5, bobAmplitude: 1.2 },
+  basic: {
+    recoilDistance: 4,
+    recoilRecovery: 0.22,
+    bobPeriod: 1.7,
+    bobAmplitude: 0.9,
+  },
+  fast: {
+    recoilDistance: 2.5,
+    recoilRecovery: 0.1,
+    bobPeriod: 1.0,
+    bobAmplitude: 0.6,
+  },
+  heavy: {
+    recoilDistance: 7,
+    recoilRecovery: 0.34,
+    bobPeriod: 2.5,
+    bobAmplitude: 1.2,
+  },
 };
 
 /** Everything about a tower's motion that changes over time. */
@@ -69,9 +84,16 @@ export function igniteMotion(state: MotionState): void {
  * this keeps pace at 2x and stops dead when the run is paused — the same clock
  * as the combat it depicts.
  */
-export function advanceMotion(state: MotionState, dtSeconds: number, profile: MotionProfile): void {
+export function advanceMotion(
+  state: MotionState,
+  dtSeconds: number,
+  profile: MotionProfile,
+): void {
   if (state.recoil > 0) {
-    state.recoil = Math.max(0, state.recoil - dtSeconds / profile.recoilRecovery);
+    state.recoil = Math.max(
+      0,
+      state.recoil - dtSeconds / profile.recoilRecovery,
+    );
   }
   if (state.flashLife > 0) {
     state.flashLife = Math.max(0, state.flashLife - dtSeconds);
@@ -80,7 +102,7 @@ export function advanceMotion(state: MotionState, dtSeconds: number, profile: Mo
   // dance unconditionally perturbs the value by a float ulp even for dt = 0,
   // which would make a paused frame subtly not a no-op.
   const phase = state.bobPhase + dtSeconds / profile.bobPeriod;
-  state.bobPhase = phase >= 0 && phase < 1 ? phase : (((phase % 1) + 1) % 1);
+  state.bobPhase = phase >= 0 && phase < 1 ? phase : ((phase % 1) + 1) % 1;
 }
 
 /**

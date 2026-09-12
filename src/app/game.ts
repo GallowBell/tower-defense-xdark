@@ -16,7 +16,9 @@ const SCENE_REGISTRY: Record<SceneKey, Phaser.Types.Scenes.SceneType> = {
   ui: UIScene,
 };
 
-export const GAME_SCENES = SCENE_FLOW.map((sceneKey) => SCENE_REGISTRY[sceneKey]);
+export const GAME_SCENES = SCENE_FLOW.map(
+  (sceneKey) => SCENE_REGISTRY[sceneKey],
+);
 
 export const createGameConfig = (): Phaser.Types.Core.GameConfig => ({
   type: Phaser.AUTO,
@@ -34,4 +36,5 @@ export const createGameConfig = (): Phaser.Types.Core.GameConfig => ({
   },
 });
 
-export const createGame = (): Phaser.Game => new Phaser.Game(createGameConfig());
+export const createGame = (): Phaser.Game =>
+  new Phaser.Game(createGameConfig());

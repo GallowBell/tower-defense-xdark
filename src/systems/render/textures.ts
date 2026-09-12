@@ -195,9 +195,24 @@ function ensureTiles(scene: Phaser.Scene): void {
     // Grit. Fixed per variant rather than random, so the road is identical
     // across restarts and across the three maps.
     const gritByVariant: [number, number, number][][] = [
-      [[11, 14, 3], [31, 9, 2], [22, 33, 2.5], [39, 28, 2]],
-      [[8, 30, 2.5], [19, 12, 2], [35, 37, 3], [28, 20, 2]],
-      [[14, 24, 2], [33, 16, 2.5], [24, 40, 2], [40, 34, 2.5]],
+      [
+        [11, 14, 3],
+        [31, 9, 2],
+        [22, 33, 2.5],
+        [39, 28, 2],
+      ],
+      [
+        [8, 30, 2.5],
+        [19, 12, 2],
+        [35, 37, 3],
+        [28, 20, 2],
+      ],
+      [
+        [14, 24, 2],
+        [33, 16, 2.5],
+        [24, 40, 2],
+        [40, 34, 2.5],
+      ],
     ];
     const grit = gritByVariant[variant];
     for (const [gx, gy, r] of grit) {
@@ -224,9 +239,18 @@ function ensureTiles(scene: Phaser.Scene): void {
   }
 }
 
-type ShapeDrawer = (g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number) => void;
+type ShapeDrawer = (
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+) => void;
 
-function ensureTowerBase(scene: Phaser.Scene, archetype: TowerArchetype, draw: ShapeDrawer): void {
+function ensureTowerBase(
+  scene: Phaser.Scene,
+  archetype: TowerArchetype,
+  draw: ShapeDrawer,
+): void {
   const key = towerBaseTextureKey(archetype);
   if (scene.textures.exists(key)) return;
 
@@ -315,7 +339,11 @@ function ensureSplashRing(scene: Phaser.Scene): void {
   g.destroy();
 }
 
-function ensureEnemyBody(scene: Phaser.Scene, archetype: EnemyArchetype, draw: ShapeDrawer): void {
+function ensureEnemyBody(
+  scene: Phaser.Scene,
+  archetype: EnemyArchetype,
+  draw: ShapeDrawer,
+): void {
   const key = enemyBodyTextureKey(archetype);
   if (scene.textures.exists(key)) return;
 
@@ -347,7 +375,7 @@ function ensureEnemyArmor(scene: Phaser.Scene): void {
 
   // Three plates stacked toward the leading edge, each a little shorter.
   const plates: [number, number][] = [
-    [0.30, 0.80],
+    [0.3, 0.8],
     [0.58, 0.62],
     [0.84, 0.38],
   ];
@@ -377,7 +405,12 @@ function ensurePixel(scene: Phaser.Scene): void {
 }
 
 /** Grunt: a round body with a blunt leading edge. */
-function drawGrunt(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
+function drawGrunt(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+): void {
   g.fillCircle(cx, cy, r);
   g.strokeCircle(cx, cy, r);
   // Snout: a small wedge past the leading edge, so its heading is readable.
@@ -390,7 +423,12 @@ function drawGrunt(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: nu
 }
 
 /** Runner: a long arrowhead — all of its silhouette points where it is going. */
-function drawRunner(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
+function drawRunner(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+): void {
   g.beginPath();
   g.moveTo(cx + r * 1.25, cy);
   g.lineTo(cx - r * 0.55, cy - r * 0.85);
@@ -402,7 +440,12 @@ function drawRunner(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: n
 }
 
 /** Brute: a heavy slab, wider than it is long. */
-function drawBrute(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
+function drawBrute(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+): void {
   const halfLength = r * 0.85;
   const halfWidth = r;
   const chamfer = r * 0.34;
@@ -421,7 +464,12 @@ function drawBrute(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: nu
   g.strokePath();
 }
 
-function drawDiamond(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
+function drawDiamond(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+): void {
   g.beginPath();
   g.moveTo(cx, cy - r);
   g.lineTo(cx + r, cy);
@@ -432,7 +480,12 @@ function drawDiamond(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: 
   g.strokePath();
 }
 
-function drawTriangle(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
+function drawTriangle(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+): void {
   const h = r * 0.866;
   g.beginPath();
   g.moveTo(cx, cy - r);
@@ -443,7 +496,12 @@ function drawTriangle(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r:
   g.strokePath();
 }
 
-function drawPentagon(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
+function drawPentagon(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+): void {
   g.beginPath();
   for (let i = 0; i < 5; i++) {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 5;

@@ -20,9 +20,9 @@ export interface WaveSystemCallbacks {
 export class WaveSystem {
   private factory: EnemyFactory;
   private currentWave: WaveDefinition | null = null;
-  private entryIndex: number = 0;   // which SpawnEntry we're processing
-  private spawnCount: number = 0;   // how many spawned in current entry
-  private timer: number = 0;        // seconds until next spawn
+  private entryIndex: number = 0; // which SpawnEntry we're processing
+  private spawnCount: number = 0; // how many spawned in current entry
+  private timer: number = 0; // seconds until next spawn
   private spawnComplete: boolean = false;
 
   constructor(factory: EnemyFactory) {

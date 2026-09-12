@@ -11,7 +11,11 @@ export interface MapDefinition {
   waypoints: Vec2[];
 }
 
-function buildTiles(cols: number, rows: number, waypoints: Vec2[]): TileType[][] {
+function buildTiles(
+  cols: number,
+  rows: number,
+  waypoints: Vec2[],
+): TileType[][] {
   const tiles: TileType[][] = Array.from({ length: rows }, () =>
     Array.from({ length: cols }, (): TileType => 'buildable'),
   );
@@ -36,28 +40,28 @@ function buildTiles(cols: number, rows: number, waypoints: Vec2[]): TileType[][]
 }
 
 const WAYPOINTS_MAP01: Vec2[] = [
-  { x: 0,  y: 2  },   // entry — left edge, row 2
-  { x: 10, y: 2  },   // corner — end of top horizontal
-  { x: 10, y: 11 },   // corner — end of vertical drop
-  { x: 23, y: 11 },   // exit  — right edge, row 11
+  { x: 0, y: 2 }, // entry — left edge, row 2
+  { x: 10, y: 2 }, // corner — end of top horizontal
+  { x: 10, y: 11 }, // corner — end of vertical drop
+  { x: 23, y: 11 }, // exit  — right edge, row 11
 ];
 
 const WAYPOINTS_MAP02: Vec2[] = [
-  { x: 0,  y: 7  },   // entry — left edge, row 7
-  { x: 10, y: 7  },   // corner
-  { x: 10, y: 2  },   // corner — go up
-  { x: 20, y: 2  },   // corner — go right
-  { x: 20, y: 11 },   // corner — go down
-  { x: 23, y: 11 },   // exit  — right edge
+  { x: 0, y: 7 }, // entry — left edge, row 7
+  { x: 10, y: 7 }, // corner
+  { x: 10, y: 2 }, // corner — go up
+  { x: 20, y: 2 }, // corner — go right
+  { x: 20, y: 11 }, // corner — go down
+  { x: 23, y: 11 }, // exit  — right edge
 ];
 
 const WAYPOINTS_MAP03: Vec2[] = [
-  { x: 0,  y: 2  },   // entry — left edge, row 2
-  { x: 7,  y: 2  },   // corner
-  { x: 7,  y: 11 },   // corner — go down
-  { x: 16, y: 11 },   // corner — go right
-  { x: 16, y: 2  },   // corner — go up
-  { x: 23, y: 2  },   // exit  — right edge, row 2
+  { x: 0, y: 2 }, // entry — left edge, row 2
+  { x: 7, y: 2 }, // corner
+  { x: 7, y: 11 }, // corner — go down
+  { x: 16, y: 11 }, // corner — go right
+  { x: 16, y: 2 }, // corner — go up
+  { x: 23, y: 2 }, // exit  — right edge, row 2
 ];
 
 export const MAP_DEFINITIONS: Record<string, MapDefinition> = {

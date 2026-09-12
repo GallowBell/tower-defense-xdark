@@ -13,7 +13,7 @@ export class SkinManager {
   }
 
   getCurrentTheme(): ThemeDefinition {
-    return THEMES.find(t => t.id === this.currentThemeId) ?? THEMES[0];
+    return THEMES.find((t) => t.id === this.currentThemeId) ?? THEMES[0];
   }
 
   setTheme(themeId: string): void {

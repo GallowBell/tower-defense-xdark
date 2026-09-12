@@ -18,7 +18,7 @@ describe('projectile styles', () => {
   });
 
   it('gives each archetype a visibly different shot', () => {
-    const shapes = ARCHETYPES.map(a => {
+    const shapes = ARCHETYPES.map((a) => {
       const s = projectileStyleFor(a);
       return `${s.headRadius}:${s.trailLength}:${s.speed}`;
     });
@@ -26,8 +26,12 @@ describe('projectile styles', () => {
   });
 
   it('makes the Cannon shell fat and slow and the Gunner tracer small and fast', () => {
-    expect(PROJECTILE_STYLES.heavy.headRadius).toBeGreaterThan(PROJECTILE_STYLES.fast.headRadius);
-    expect(PROJECTILE_STYLES.fast.speed).toBeGreaterThan(PROJECTILE_STYLES.heavy.speed);
+    expect(PROJECTILE_STYLES.heavy.headRadius).toBeGreaterThan(
+      PROJECTILE_STYLES.fast.headRadius,
+    );
+    expect(PROJECTILE_STYLES.fast.speed).toBeGreaterThan(
+      PROJECTILE_STYLES.heavy.speed,
+    );
   });
 
   it('crosses a tower’s own range fast enough to stay in step with its damage', () => {
@@ -35,7 +39,9 @@ describe('projectile styles', () => {
     // chasing it. Much over a third of a second and the shell visibly arrives
     // after the number it caused.
     for (const archetype of ARCHETYPES) {
-      const flightTime = TOWER_DEFINITIONS[archetype].range / projectileStyleFor(archetype).speed;
+      const flightTime =
+        TOWER_DEFINITIONS[archetype].range /
+        projectileStyleFor(archetype).speed;
       expect(flightTime, archetype).toBeLessThan(0.5);
     }
   });
@@ -59,7 +65,10 @@ describe('trail puffs', () => {
 
   it('never draws a puff on top of the head', () => {
     for (const archetype of ARCHETYPES) {
-      expect(trailPuff(0, projectileStyleFor(archetype)).distance, archetype).toBeGreaterThan(0);
+      expect(
+        trailPuff(0, projectileStyleFor(archetype)).distance,
+        archetype,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -74,7 +83,10 @@ describe('trail puffs', () => {
   it('fades the tail to nothing, so a trail has no hard end', () => {
     for (const archetype of ARCHETYPES) {
       const style = projectileStyleFor(archetype);
-      expect(trailPuff(style.trailSegments - 1, style).alpha, archetype).toBeCloseTo(0, 10);
+      expect(
+        trailPuff(style.trailSegments - 1, style).alpha,
+        archetype,
+      ).toBeCloseTo(0, 10);
     }
   });
 

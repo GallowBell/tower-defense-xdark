@@ -32,10 +32,17 @@ function makeEnemy(overrides: Partial<EnemyState> = {}): EnemyState {
 }
 
 // Two-waypoint path: (0,0) → (100,0) — enemy starts at first waypoint
-const WP_SIMPLE: Vec2[] = [{ x: 0, y: 0 }, { x: 100, y: 0 }];
+const WP_SIMPLE: Vec2[] = [
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+];
 
 // Three-waypoint path: (0,0) → (100,0) → (100,200)
-const WP_THREE: Vec2[] = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 200 }];
+const WP_THREE: Vec2[] = [
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+  { x: 100, y: 200 },
+];
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PathSystem
@@ -104,7 +111,13 @@ describe('PathSystem', () => {
   // ── 6. Does NOT move when already leaked ──────────────────────────────────
 
   it('does NOT move when the enemy is already leaked', () => {
-    const enemy = makeEnemy({ x: 50, y: 0, speed: 100, waypointIndex: 1, leaked: true });
+    const enemy = makeEnemy({
+      x: 50,
+      y: 0,
+      speed: 100,
+      waypointIndex: 1,
+      leaked: true,
+    });
     ps.advance(enemy, WP_SIMPLE, 1.0);
     expect(enemy.x).toBe(50); // position unchanged
     expect(enemy.y).toBe(0);
@@ -145,7 +158,13 @@ describe('PathSystem', () => {
   // ── 10. Does NOT move when dead ───────────────────────────────────────────
 
   it('does not move when enemy is dead', () => {
-    const enemy = makeEnemy({ x: 0, y: 0, speed: 100, waypointIndex: 1, dead: true });
+    const enemy = makeEnemy({
+      x: 0,
+      y: 0,
+      speed: 100,
+      waypointIndex: 1,
+      dead: true,
+    });
     ps.advance(enemy, WP_SIMPLE, 1.0);
     expect(enemy.x).toBe(0);
     expect(enemy.y).toBe(0);
@@ -281,7 +300,14 @@ describe('WaveSystem', () => {
     ws.startWave(SIMPLE_WAVE);
     // Exhaust the wave fully
     const spawned: EnemyState[] = [];
-    const cb = { onSpawn: (e: EnemyState) => { spawned.push(e); }, onWaveSpawnComplete: () => { /* no-op */ } };
+    const cb = {
+      onSpawn: (e: EnemyState) => {
+        spawned.push(e);
+      },
+      onWaveSpawnComplete: () => {
+        /* no-op */
+      },
+    };
     ws.update(0, spawnPos, cb);
     ws.update(2.0, spawnPos, cb);
     expect(ws.isSpawnComplete).toBe(true);
@@ -294,7 +320,10 @@ describe('WaveSystem', () => {
     ws.startWave(SIMPLE_WAVE);
     ws.startWave(SIMPLE_WAVE); // reset immediately
     const spawned: EnemyState[] = [];
-    ws.update(0, spawnPos, { onSpawn: (e) => spawned.push(e), onWaveSpawnComplete: () => {} });
+    ws.update(0, spawnPos, {
+      onSpawn: (e) => spawned.push(e),
+      onWaveSpawnComplete: () => {},
+    });
     // After second startWave + first tick, first enemy should spawn
     expect(spawned.length).toBeGreaterThanOrEqual(1);
   });
@@ -304,7 +333,10 @@ describe('WaveSystem', () => {
   it('spawns the first enemy on the very first update call', () => {
     ws.startWave(SIMPLE_WAVE);
     const spawned: EnemyState[] = [];
-    ws.update(0, spawnPos, { onSpawn: (e) => spawned.push(e), onWaveSpawnComplete: () => {} });
+    ws.update(0, spawnPos, {
+      onSpawn: (e) => spawned.push(e),
+      onWaveSpawnComplete: () => {},
+    });
     expect(spawned.length).toBe(1);
     expect(spawned[0].archetype).toBe('basic');
   });
@@ -314,8 +346,11 @@ describe('WaveSystem', () => {
   it('does not spawn second enemy before interval has elapsed', () => {
     ws.startWave(SIMPLE_WAVE);
     const spawned: EnemyState[] = [];
-    const cb = { onSpawn: (e: EnemyState) => spawned.push(e), onWaveSpawnComplete: () => {} };
-    ws.update(0, spawnPos, cb);   // first enemy
+    const cb = {
+      onSpawn: (e: EnemyState) => spawned.push(e),
+      onWaveSpawnComplete: () => {},
+    };
+    ws.update(0, spawnPos, cb); // first enemy
     ws.update(0.4, spawnPos, cb); // interval=1.0, 0.4 < 1.0 → no new spawn
     expect(spawned.length).toBe(1);
   });
@@ -323,8 +358,11 @@ describe('WaveSystem', () => {
   it('spawns second enemy after interval seconds have elapsed', () => {
     ws.startWave(SIMPLE_WAVE);
     const spawned: EnemyState[] = [];
-    const cb = { onSpawn: (e: EnemyState) => spawned.push(e), onWaveSpawnComplete: () => {} };
-    ws.update(0, spawnPos, cb);   // first enemy
+    const cb = {
+      onSpawn: (e: EnemyState) => spawned.push(e),
+      onWaveSpawnComplete: () => {},
+    };
+    ws.update(0, spawnPos, cb); // first enemy
     ws.update(1.0, spawnPos, cb); // interval=1.0, exactly 1.0 s → second spawn
     expect(spawned.length).toBe(2);
   });
@@ -334,8 +372,13 @@ describe('WaveSystem', () => {
   it('calls onWaveSpawnComplete after all enemies are spawned', () => {
     ws.startWave(SIMPLE_WAVE);
     let completeCalled = 0;
-    const cb = { onSpawn: () => {}, onWaveSpawnComplete: () => { completeCalled++; } };
-    ws.update(0, spawnPos, cb);   // spawn 1
+    const cb = {
+      onSpawn: () => {},
+      onWaveSpawnComplete: () => {
+        completeCalled++;
+      },
+    };
+    ws.update(0, spawnPos, cb); // spawn 1
     ws.update(1.0, spawnPos, cb); // spawn 2 → complete
     expect(completeCalled).toBe(1);
   });
@@ -345,16 +388,19 @@ describe('WaveSystem', () => {
   it('after first entry done, second entry starts spawning', () => {
     ws.startWave(TWO_ENTRY_WAVE);
     const spawned: EnemyState[] = [];
-    const cb = { onSpawn: (e: EnemyState) => spawned.push(e), onWaveSpawnComplete: () => {} };
-    ws.update(0, spawnPos, cb);    // spawn basic #1
-    ws.update(0.5, spawnPos, cb);  // spawn basic #2 → entry done, next entry starts
-    ws.update(0.8, spawnPos, cb);  // spawn fast #1
-    const archetypes = spawned.map(e => e.archetype);
+    const cb = {
+      onSpawn: (e: EnemyState) => spawned.push(e),
+      onWaveSpawnComplete: () => {},
+    };
+    ws.update(0, spawnPos, cb); // spawn basic #1
+    ws.update(0.5, spawnPos, cb); // spawn basic #2 → entry done, next entry starts
+    ws.update(0.8, spawnPos, cb); // spawn fast #1
+    const archetypes = spawned.map((e) => e.archetype);
     expect(archetypes).toContain('basic');
     expect(archetypes).toContain('fast');
     // Two basics, one fast
-    expect(archetypes.filter(a => a === 'basic').length).toBe(2);
-    expect(archetypes.filter(a => a === 'fast').length).toBe(1);
+    expect(archetypes.filter((a) => a === 'basic').length).toBe(2);
+    expect(archetypes.filter((a) => a === 'fast').length).toBe(1);
   });
 
   // ── 6. isSpawnComplete returns false before done, true after ─────────────
@@ -365,7 +411,10 @@ describe('WaveSystem', () => {
 
   it('isSpawnComplete is false after partial spawn', () => {
     ws.startWave(SIMPLE_WAVE);
-    ws.update(0, spawnPos, { onSpawn: () => {}, onWaveSpawnComplete: () => {} });
+    ws.update(0, spawnPos, {
+      onSpawn: () => {},
+      onWaveSpawnComplete: () => {},
+    });
     expect(ws.isSpawnComplete).toBe(false); // still 1 more to spawn
   });
 
@@ -382,11 +431,16 @@ describe('WaveSystem', () => {
   it('onWaveSpawnComplete fires exactly once, not on subsequent updates', () => {
     ws.startWave(SIMPLE_WAVE);
     let completeCalled = 0;
-    const cb = { onSpawn: () => {}, onWaveSpawnComplete: () => { completeCalled++; } };
+    const cb = {
+      onSpawn: () => {},
+      onWaveSpawnComplete: () => {
+        completeCalled++;
+      },
+    };
     ws.update(0, spawnPos, cb);
-    ws.update(1.0, spawnPos, cb);   // triggers complete
-    ws.update(1.0, spawnPos, cb);   // no-op after complete
-    ws.update(1.0, spawnPos, cb);   // no-op after complete
+    ws.update(1.0, spawnPos, cb); // triggers complete
+    ws.update(1.0, spawnPos, cb); // no-op after complete
+    ws.update(1.0, spawnPos, cb); // no-op after complete
     expect(completeCalled).toBe(1);
   });
 
@@ -395,7 +449,10 @@ describe('WaveSystem', () => {
   it('spawned enemies have incrementing uids from the factory', () => {
     ws.startWave(SIMPLE_WAVE);
     const spawned: EnemyState[] = [];
-    const cb = { onSpawn: (e: EnemyState) => spawned.push(e), onWaveSpawnComplete: () => {} };
+    const cb = {
+      onSpawn: (e: EnemyState) => spawned.push(e),
+      onWaveSpawnComplete: () => {},
+    };
     ws.update(0, spawnPos, cb);
     ws.update(1.0, spawnPos, cb);
     expect(spawned[0].uid).toBe('enemy_0');
@@ -407,7 +464,10 @@ describe('WaveSystem', () => {
   it('update is a no-op when no wave has been started', () => {
     // Should not throw
     expect(() => {
-      ws.update(1.0, spawnPos, { onSpawn: () => {}, onWaveSpawnComplete: () => {} });
+      ws.update(1.0, spawnPos, {
+        onSpawn: () => {},
+        onWaveSpawnComplete: () => {},
+      });
     }).not.toThrow();
     expect(ws.isSpawnComplete).toBe(false);
   });

@@ -35,10 +35,16 @@ export class DamageSystem {
    *
    * @param enemies every active enemy — only consulted for splash damage.
    */
-  applyHit(tower: TowerState, enemy: EnemyState, enemies: EnemyState[] = []): DamageResult {
+  applyHit(
+    tower: TowerState,
+    enemy: EnemyState,
+    enemies: EnemyState[] = [],
+  ): DamageResult {
     const def = tower.definition;
     const isCrit = Math.random() < def.critRate;
-    const rawDamage = isCrit ? Math.floor(def.damage * def.critDamage) : def.damage;
+    const rawDamage = isCrit
+      ? Math.floor(def.damage * def.critDamage)
+      : def.damage;
 
     const damageDealt = this.damageEnemy(enemy, rawDamage);
     const killed = enemy.hp === 0;
@@ -65,7 +71,14 @@ export class DamageSystem {
       }
     }
 
-    return { killed, goldEarned, damageDealt, wasCrit: isCrit, splashHits, splashKills };
+    return {
+      killed,
+      goldEarned,
+      damageDealt,
+      wasCrit: isCrit,
+      splashHits,
+      splashKills,
+    };
   }
 
   /**

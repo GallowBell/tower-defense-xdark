@@ -26,7 +26,10 @@ describe('recoil', () => {
   it('kicks the barrel its full distance on the frame it fires', () => {
     const state = restingMotion(0);
     igniteMotion(state);
-    expect(recoilOffset(state.recoil, MOTION.basic)).toBeCloseTo(MOTION.basic.recoilDistance, 5);
+    expect(recoilOffset(state.recoil, MOTION.basic)).toBeCloseTo(
+      MOTION.basic.recoilDistance,
+      5,
+    );
   });
 
   it('returns exactly to rest after recoilRecovery seconds', () => {
@@ -77,11 +80,15 @@ describe('recoil recovery against real reload times', () => {
    */
   it('leaves every archetype time to seat its barrel at max level', () => {
     const maxSteps = DIFFICULTY.maxTowerLevel - 1;
-    const fireRateMultiplier = 1 + DIFFICULTY.upgradeFireRatePerLevel * maxSteps;
+    const fireRateMultiplier =
+      1 + DIFFICULTY.upgradeFireRatePerLevel * maxSteps;
 
     for (const archetype of ARCHETYPES) {
-      const reloadAtMaxLevel = 1 / (TOWER_DEFINITIONS[archetype].fireRate * fireRateMultiplier);
-      expect(MOTION[archetype].recoilRecovery, archetype).toBeLessThan(reloadAtMaxLevel);
+      const reloadAtMaxLevel =
+        1 / (TOWER_DEFINITIONS[archetype].fireRate * fireRateMultiplier);
+      expect(MOTION[archetype].recoilRecovery, archetype).toBeLessThan(
+        reloadAtMaxLevel,
+      );
     }
   });
 });
@@ -111,7 +118,9 @@ describe('idle bob', () => {
 
     for (let i = 0; i < 400; i++) {
       advanceMotion(state, STEP, profile);
-      expect(Math.abs(bobOffset(state.bobPhase, profile))).toBeLessThanOrEqual(profile.bobAmplitude);
+      expect(Math.abs(bobOffset(state.bobPhase, profile))).toBeLessThanOrEqual(
+        profile.bobAmplitude,
+      );
     }
   });
 
@@ -147,7 +156,9 @@ describe('idle bob', () => {
   });
 
   it('staggers towers so a row of them does not pulse as one block', () => {
-    const phases = new Set(Array.from({ length: 20 }, () => restingMotion().bobPhase));
+    const phases = new Set(
+      Array.from({ length: 20 }, () => restingMotion().bobPhase),
+    );
     expect(phases.size).toBeGreaterThan(1);
   });
 });
@@ -160,8 +171,12 @@ describe('motion profiles', () => {
   });
 
   it('gives the heaviest tower the heaviest kick and the slowest idle', () => {
-    expect(MOTION.heavy.recoilDistance).toBeGreaterThan(MOTION.basic.recoilDistance);
-    expect(MOTION.basic.recoilDistance).toBeGreaterThan(MOTION.fast.recoilDistance);
+    expect(MOTION.heavy.recoilDistance).toBeGreaterThan(
+      MOTION.basic.recoilDistance,
+    );
+    expect(MOTION.basic.recoilDistance).toBeGreaterThan(
+      MOTION.fast.recoilDistance,
+    );
     expect(MOTION.heavy.bobPeriod).toBeGreaterThan(MOTION.basic.bobPeriod);
     expect(MOTION.basic.bobPeriod).toBeGreaterThan(MOTION.fast.bobPeriod);
   });

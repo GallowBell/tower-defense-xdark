@@ -21,7 +21,10 @@ import { validatePlacement } from '../systems/placement/PlacementSystem';
 import { SplashRingPool } from '../systems/render/SplashRingPool';
 import { EnemyView } from '../systems/render/EnemyView';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
-import { projectileStyleFor, trailPuff } from '../systems/render/projectileStyle';
+import {
+  projectileStyleFor,
+  trailPuff,
+} from '../systems/render/projectileStyle';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { SkinManager } from '../systems/skins/SkinManager';
 import { SoundManager } from '../systems/audio/SoundManager';
@@ -160,8 +163,12 @@ export class GameScene extends Phaser.Scene {
 
     // ── 4c. Visual systems ───────────────────────────────────────────────────
     this.projectileSystem = new ProjectileSystem();
-    this.towerGraphics = this.add.graphics().setDepth(RENDER_DEPTH.rangeIndicator);
-    this.projectileGraphics = this.add.graphics().setDepth(RENDER_DEPTH.projectiles);
+    this.towerGraphics = this.add
+      .graphics()
+      .setDepth(RENDER_DEPTH.rangeIndicator);
+    this.projectileGraphics = this.add
+      .graphics()
+      .setDepth(RENDER_DEPTH.projectiles);
     this.floatingText = new FloatingTextPool(this);
     this.splashRings = new SplashRingPool(this);
     this.buildGhost = new BuildGhost(this);
@@ -209,7 +216,7 @@ export class GameScene extends Phaser.Scene {
       if (this.isPaused) return;
 
       if (pointer.leftButtonDown()) {
-        let clickedTower: typeof this.store.towers[number] | null = null;
+        let clickedTower: (typeof this.store.towers)[number] | null = null;
         for (const t of this.store.towers) {
           const dx = pointer.worldX - t.worldX;
           const dy = pointer.worldY - t.worldY;
@@ -220,13 +227,20 @@ export class GameScene extends Phaser.Scene {
         }
 
         if (clickedTower) {
-          this.selectedTowerUid = this.selectedTowerUid === clickedTower.uid ? null : clickedTower.uid;
+          this.selectedTowerUid =
+            this.selectedTowerUid === clickedTower.uid
+              ? null
+              : clickedTower.uid;
           this.registry.set('selectedTowerUid', this.selectedTowerUid);
         } else {
           const grid = worldToGrid(pointer.worldX, pointer.worldY);
           if (!grid) return;
 
-          const result = this.sim.placeTower(grid.x, grid.y, this.selectedArchetype);
+          const result = this.sim.placeTower(
+            grid.x,
+            grid.y,
+            this.selectedArchetype,
+          );
 
           if (result.success) {
             this.addTowerView(result.tower!, true);
@@ -282,7 +296,9 @@ export class GameScene extends Phaser.Scene {
     // ── 6d. Upgrade hotkey [U] ────────────────────────────────────────────────
     this.input.keyboard?.on('keydown-U', () => {
       if (this.isPaused || !this.selectedTowerUid) return;
-      const tower = this.store.towers.find(t => t.uid === this.selectedTowerUid);
+      const tower = this.store.towers.find(
+        (t) => t.uid === this.selectedTowerUid,
+      );
       if (!tower || this.sim.upgradeTower(tower.uid) === 0) return;
 
       this.soundManager.playUpgrade();
@@ -301,7 +317,8 @@ export class GameScene extends Phaser.Scene {
     };
 
     // Speed control button (right side)
-    this.speedText = this.add.text(990, 16, 'Speed 1x', btnStyle)
+    this.speedText = this.add
+      .text(990, 16, 'Speed 1x', btnStyle)
       .setInteractive()
       .on('pointerdown', () => {
         const newSpeed = this.speedMultiplier === 1 ? 2 : 1;
@@ -311,12 +328,14 @@ export class GameScene extends Phaser.Scene {
       });
 
     // Pause button
-    this.pauseButton = this.add.text(1110, 16, '⏸ Pause', { ...btnStyle, backgroundColor: '#7c3aed' })
+    this.pauseButton = this.add
+      .text(1110, 16, '⏸ Pause', { ...btnStyle, backgroundColor: '#7c3aed' })
       .setInteractive()
       .on('pointerdown', () => this.togglePause());
 
     // Start Wave button
-    this.add.text(1200, 16, '▶ Start', { ...btnStyle, backgroundColor: '#1d4ed8' })
+    this.add
+      .text(1200, 16, '▶ Start', { ...btnStyle, backgroundColor: '#1d4ed8' })
       .setInteractive()
       .on('pointerdown', () => this.startNextWave());
 
@@ -326,13 +345,20 @@ export class GameScene extends Phaser.Scene {
 
     // ── 8. Pause overlay (hidden initially) ──────────────────────────────────
     const { width, height } = this.cameras.main;
-    const pauseBg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.45).setDepth(1000).setVisible(false);
-    const pauseText = this.add.text(width / 2, height / 2, '⏸ PAUSED', {
-      color: '#f8fafc',
-      fontFamily: 'Arial',
-      fontSize: '56px',
-      fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(1001).setVisible(false);
+    const pauseBg = this.add
+      .rectangle(width / 2, height / 2, width, height, 0x000000, 0.45)
+      .setDepth(1000)
+      .setVisible(false);
+    const pauseText = this.add
+      .text(width / 2, height / 2, '⏸ PAUSED', {
+        color: '#f8fafc',
+        fontFamily: 'Arial',
+        fontSize: '56px',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001)
+      .setVisible(false);
     this.pauseOverlayObjs = [pauseBg, pauseText];
 
     // ── 8b. Tear-down ─────────────────────────────────────────────────────────
@@ -356,7 +382,9 @@ export class GameScene extends Phaser.Scene {
     if (this.overlayShown) return;
     this.isPaused = !this.isPaused;
     this.pauseButton.setText(this.isPaused ? '▶ Resume' : '⏸ Pause');
-    this.pauseOverlayObjs.forEach(obj => { obj.visible = this.isPaused; });
+    this.pauseOverlayObjs.forEach((obj) => {
+      obj.visible = this.isPaused;
+    });
     this.applyTimeScale();
   }
 
@@ -397,7 +425,8 @@ export class GameScene extends Phaser.Scene {
       this.lastSimulatedSeconds = 0;
     } else {
       // Cap the frame delta so a tab-out or GC pause doesn't bank a huge backlog.
-      this.simAccumulator += Math.min(delta / 1000, 0.25) * this.speedMultiplier;
+      this.simAccumulator +=
+        Math.min(delta / 1000, 0.25) * this.speedMultiplier;
 
       let steps = 0;
       while (
@@ -419,7 +448,12 @@ export class GameScene extends Phaser.Scene {
       if (steps > 0) {
         this.projectileSystem.update(
           this.lastSimulatedSeconds,
-          this.sim.enemies.map(e => ({ uid: e.uid, x: e.x, y: e.y, dead: e.dead })),
+          this.sim.enemies.map((e) => ({
+            uid: e.uid,
+            x: e.x,
+            y: e.y,
+            dead: e.dead,
+          })),
         );
       }
     }
@@ -480,8 +514,14 @@ export class GameScene extends Phaser.Scene {
    *   in. False on the recovery path below, which is backfilling a view for a
    *   tower that has been standing there all along.
    */
-  private addTowerView(tower: typeof this.store.towers[number], animateIn = false): void {
-    const color = this.skinManager.resolveTowerColor(tower.archetype, tower.definition.color);
+  private addTowerView(
+    tower: (typeof this.store.towers)[number],
+    animateIn = false,
+  ): void {
+    const color = this.skinManager.resolveTowerColor(
+      tower.archetype,
+      tower.definition.color,
+    );
     const view = new TowerView(this, tower, color);
     this.towerViews.set(tower.uid, view);
     if (animateIn) view.playPlaceIn();
@@ -519,7 +559,8 @@ export class GameScene extends Phaser.Scene {
       }
 
       const target = tower.targetUid
-        ? this.sim.enemies.find(e => e.uid === tower.targetUid && !e.dead) ?? null
+        ? (this.sim.enemies.find((e) => e.uid === tower.targetUid && !e.dead) ??
+          null)
         : null;
 
       view.sync(tower, target, dt);
@@ -530,7 +571,9 @@ export class GameScene extends Phaser.Scene {
   private spawnEnemyView(enemy: EnemyState): void {
     const enemyColor =
       this.skinManager.getEnemyColors()[
-        enemy.archetype as keyof ReturnType<typeof this.skinManager.getEnemyColors>
+        enemy.archetype as keyof ReturnType<
+          typeof this.skinManager.getEnemyColors
+        >
       ] ?? enemy.color;
     this.enemyViews.set(enemy.uid, new EnemyView(this, enemy, enemyColor));
   }
@@ -578,7 +621,8 @@ export class GameScene extends Phaser.Scene {
 
     if (!shot.target.dead) {
       this.projectileSystem.fire(
-        shot.tower.worldX, shot.tower.worldY,
+        shot.tower.worldX,
+        shot.tower.worldY,
         { uid: shot.target.uid, x: shot.target.x, y: shot.target.y },
         shot.tower.definition.color,
         shot.tower.archetype,
@@ -587,11 +631,17 @@ export class GameScene extends Phaser.Scene {
 
     this.soundManager.playShoot();
     this.towerViews.get(shot.tower.uid)?.fire();
-    this.particleManager.towerFire(shot.tower.worldX, shot.tower.worldY, shot.tower.definition.color);
+    this.particleManager.towerFire(
+      shot.tower.worldX,
+      shot.tower.worldY,
+      shot.tower.definition.color,
+    );
     this.shotGraphics.lineStyle(1, 0xffffff, 0.7);
     this.shotGraphics.lineBetween(
-      shot.tower.worldX, shot.tower.worldY,
-      shot.target.x, shot.target.y,
+      shot.tower.worldX,
+      shot.tower.worldY,
+      shot.target.x,
+      shot.target.y,
     );
 
     // Blast ring, so the player can see what the splash actually covered. It
@@ -599,7 +649,12 @@ export class GameScene extends Phaser.Scene {
     // onto shotGraphics it lasted one frame, which is not long enough to read.
     const { splashRadius } = shot.tower.definition;
     if (splashRadius > 0) {
-      this.splashRings.show(shot.target.x, shot.target.y, splashRadius, shot.tower.definition.color);
+      this.splashRings.show(
+        shot.target.x,
+        shot.target.y,
+        splashRadius,
+        shot.tower.definition.color,
+      );
     }
 
     // Floating damage number
@@ -628,13 +683,26 @@ export class GameScene extends Phaser.Scene {
 
   private drawScene(): void {
     // Draw hovered tower's range (recorded by the pointermove handler)
-    if (this.hoveredTowerUid && this.hoveredTowerUid !== this.selectedTowerUid) {
-      const hovered = this.store.towers.find(t => t.uid === this.hoveredTowerUid);
+    if (
+      this.hoveredTowerUid &&
+      this.hoveredTowerUid !== this.selectedTowerUid
+    ) {
+      const hovered = this.store.towers.find(
+        (t) => t.uid === this.hoveredTowerUid,
+      );
       if (hovered) {
         this.rangeIndicator.lineStyle(1, 0xffffff, 0.3);
-        this.rangeIndicator.strokeCircle(hovered.worldX, hovered.worldY, hovered.definition.range);
+        this.rangeIndicator.strokeCircle(
+          hovered.worldX,
+          hovered.worldY,
+          hovered.definition.range,
+        );
         this.rangeIndicator.fillStyle(hovered.definition.color, 0.08);
-        this.rangeIndicator.fillCircle(hovered.worldX, hovered.worldY, hovered.definition.range);
+        this.rangeIndicator.fillCircle(
+          hovered.worldX,
+          hovered.worldY,
+          hovered.definition.range,
+        );
       }
     }
 
@@ -645,17 +713,31 @@ export class GameScene extends Phaser.Scene {
 
     // Draw selection ring + range around selected tower
     if (this.selectedTowerUid) {
-      const selected = this.store.towers.find(t => t.uid === this.selectedTowerUid);
+      const selected = this.store.towers.find(
+        (t) => t.uid === this.selectedTowerUid,
+      );
       if (selected) {
         // Range circle
         this.towerGraphics.lineStyle(1, 0xffffff, 0.25);
-        this.towerGraphics.strokeCircle(selected.worldX, selected.worldY, selected.definition.range);
+        this.towerGraphics.strokeCircle(
+          selected.worldX,
+          selected.worldY,
+          selected.definition.range,
+        );
         this.towerGraphics.fillStyle(selected.definition.color, 0.06);
-        this.towerGraphics.fillCircle(selected.worldX, selected.worldY, selected.definition.range);
+        this.towerGraphics.fillCircle(
+          selected.worldX,
+          selected.worldY,
+          selected.definition.range,
+        );
 
         // Selection ring
         this.towerGraphics.lineStyle(2, 0xffffff, 0.6);
-        this.towerGraphics.strokeCircle(selected.worldX, selected.worldY, selected.definition.radius + 4);
+        this.towerGraphics.strokeCircle(
+          selected.worldX,
+          selected.worldY,
+          selected.definition.radius + 4,
+        );
       }
     }
 
@@ -731,20 +813,32 @@ export class GameScene extends Phaser.Scene {
 
     const { width, height } = this.cameras.main;
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6);
-    this.add.text(width / 2, height * 0.42, text, {
-      color: `#${color.toString(16).padStart(6, '0')}`,
-      fontFamily: 'Arial',
-      fontSize: '72px',
-      fontStyle: 'bold',
-    }).setOrigin(0.5, 0.5);
+    this.add
+      .text(width / 2, height * 0.42, text, {
+        color: `#${color.toString(16).padStart(6, '0')}`,
+        fontFamily: 'Arial',
+        fontSize: '72px',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 0.5);
 
     // Restart
-    const btnRestart = this.add.text(width / 2, height * 0.58, '▶ Play Again', {
-      color: '#f8fafc', fontFamily: 'Arial', fontSize: '24px',
-      backgroundColor: '#7c3aed', padding: { x: 16, y: 8 },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btnRestart.on('pointerover', () => btnRestart.setStyle({ backgroundColor: '#6d28d9' }));
-    btnRestart.on('pointerout', () => btnRestart.setStyle({ backgroundColor: '#7c3aed' }));
+    const btnRestart = this.add
+      .text(width / 2, height * 0.58, '▶ Play Again', {
+        color: '#f8fafc',
+        fontFamily: 'Arial',
+        fontSize: '24px',
+        backgroundColor: '#7c3aed',
+        padding: { x: 16, y: 8 },
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    btnRestart.on('pointerover', () =>
+      btnRestart.setStyle({ backgroundColor: '#6d28d9' }),
+    );
+    btnRestart.on('pointerout', () =>
+      btnRestart.setStyle({ backgroundColor: '#7c3aed' }),
+    );
     btnRestart.on('pointerdown', () => {
       this.registry.set('store', null);
       this.scene.stop(SCENE_KEYS.UI);
@@ -752,12 +846,22 @@ export class GameScene extends Phaser.Scene {
     });
 
     // Main Menu
-    const btnMenu = this.add.text(width / 2, height * 0.7, '← Main Menu', {
-      color: '#cbd5e1', fontFamily: 'Arial', fontSize: '20px',
-      backgroundColor: '#334155', padding: { x: 16, y: 8 },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btnMenu.on('pointerover', () => btnMenu.setStyle({ backgroundColor: '#475569' }));
-    btnMenu.on('pointerout', () => btnMenu.setStyle({ backgroundColor: '#334155' }));
+    const btnMenu = this.add
+      .text(width / 2, height * 0.7, '← Main Menu', {
+        color: '#cbd5e1',
+        fontFamily: 'Arial',
+        fontSize: '20px',
+        backgroundColor: '#334155',
+        padding: { x: 16, y: 8 },
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    btnMenu.on('pointerover', () =>
+      btnMenu.setStyle({ backgroundColor: '#475569' }),
+    );
+    btnMenu.on('pointerout', () =>
+      btnMenu.setStyle({ backgroundColor: '#334155' }),
+    );
     btnMenu.on('pointerdown', () => {
       this.registry.set('store', null);
       this.scene.stop(SCENE_KEYS.UI);
