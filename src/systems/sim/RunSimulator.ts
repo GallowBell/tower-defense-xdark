@@ -73,7 +73,9 @@ export class RunSimulator {
 
   /** True once the run has been decided either way. */
   get isOver(): boolean {
-    return this.store.gameState === 'game_over' || this.store.gameState === 'victory';
+    return (
+      this.store.gameState === 'game_over' || this.store.gameState === 'victory'
+    );
   }
 
   get won(): boolean {
@@ -86,7 +88,11 @@ export class RunSimulator {
    * Try to buy and place a tower. Gold only leaves the purse on success, and
    * the tower is only added once it has been paid for.
    */
-  placeTower(gridX: number, gridY: number, archetype: TowerArchetype): PlacementResult {
+  placeTower(
+    gridX: number,
+    gridY: number,
+    archetype: TowerArchetype,
+  ): PlacementResult {
     const result = this.placement.attempt(
       this.map,
       this.store.towers,
@@ -106,7 +112,7 @@ export class RunSimulator {
 
   /** Sell a tower back for a share of everything sunk into it. */
   sellTower(uid: string): number {
-    const tower = this.store.towers.find(t => t.uid === uid);
+    const tower = this.store.towers.find((t) => t.uid === uid);
     if (!tower) return 0;
 
     const refund = Math.floor(tower.investedGold * DIFFICULTY.sellRefundRatio);
@@ -120,7 +126,7 @@ export class RunSimulator {
    * @returns the gold charged, or 0 when the tower is maxed or unaffordable.
    */
   upgradeTower(uid: string): number {
-    const tower = this.store.towers.find(t => t.uid === uid);
+    const tower = this.store.towers.find((t) => t.uid === uid);
     if (!tower || !this.upgrades.canUpgrade(tower, this.store.gold)) return 0;
 
     // Price must be read before the upgrade: afterwards it quotes the next level.
@@ -133,7 +139,8 @@ export class RunSimulator {
   /** Send the next wave. @returns false when no wave can start right now. */
   startNextWave(): boolean {
     const { store } = this;
-    if (store.gameState !== 'idle' && store.gameState !== 'wave_cleared') return false;
+    if (store.gameState !== 'idle' && store.gameState !== 'wave_cleared')
+      return false;
 
     const waveDef = this.waves[store.wave - 1];
     if (!waveDef) return false;
@@ -188,13 +195,19 @@ export class RunSimulator {
     }
 
     // ── Wave cleared ─────────────────────────────────────────────────────────
-    const allEnemiesDone = this.enemies.length > 0 && this.enemies.every(e => e.dead);
-    if (store.gameState === 'wave_active' && this.waveSpawnComplete && allEnemiesDone) {
-      this.enemies = this.enemies.filter(e => !e.dead);
+    const allEnemiesDone =
+      this.enemies.length > 0 && this.enemies.every((e) => e.dead);
+    if (
+      store.gameState === 'wave_active' &&
+      this.waveSpawnComplete &&
+      allEnemiesDone
+    ) {
+      this.enemies = this.enemies.filter((e) => !e.dead);
 
       const cleared = store.wave;
       const bonus = Math.round(
-        (this.waves[cleared - 1]?.goldBonus ?? 0) * DIFFICULTY.rewardScale(cleared),
+        (this.waves[cleared - 1]?.goldBonus ?? 0) *
+          DIFFICULTY.rewardScale(cleared),
       );
       store.earnGold(bonus);
       store.onWaveCleared();
@@ -221,7 +234,10 @@ export class RunSimulator {
    * Play the run out to a win or a loss, starting each wave as the last clears.
    * @param betweenWaves called while idle, to spend gold before the next wave.
    */
-  runToEnd(betweenWaves?: (sim: RunSimulator) => void, maxSeconds = 2000): boolean {
+  runToEnd(
+    betweenWaves?: (sim: RunSimulator) => void,
+    maxSeconds = 2000,
+  ): boolean {
     let elapsed = 0;
     while (!this.isOver && elapsed < maxSeconds) {
       betweenWaves?.(this);

@@ -15,7 +15,7 @@ export class UIScene extends Phaser.Scene {
   private selectedIndex: number = 0;
   private archetypes: Array<{ key: string; label: string; cost: number }> = [
     { key: 'basic', label: 'Archer [1]  100g', cost: 100 },
-    { key: 'fast',  label: 'Gunner [2]   75g', cost: 75  },
+    { key: 'fast', label: 'Gunner [2]   75g', cost: 75 },
     { key: 'heavy', label: 'Cannon [3]  175g', cost: 175 },
   ];
   private upgradeTexts: Phaser.GameObjects.Text[] = [];
@@ -36,8 +36,17 @@ export class UIScene extends Phaser.Scene {
     this.input.keyboard?.removeAllListeners();
 
     // ── Semi-transparent top bar ───────────────────────────────────────────────
-    const panelColor = Phaser.Display.Color.HexStringToColor(GAME_COLORS.panel).color;
-    this.add.rectangle(this.cameras.main.width / 2, 24, this.cameras.main.width, 48, panelColor, 0.9);
+    const panelColor = Phaser.Display.Color.HexStringToColor(
+      GAME_COLORS.panel,
+    ).color;
+    this.add.rectangle(
+      this.cameras.main.width / 2,
+      24,
+      this.cameras.main.width,
+      48,
+      panelColor,
+      0.9,
+    );
 
     // ── HUD text objects ───────────────────────────────────────────────────────
     const textStyle: Phaser.Types.GameObjects.Text.TextStyle = {
@@ -48,21 +57,35 @@ export class UIScene extends Phaser.Scene {
 
     this.goldText = this.add.text(32, 16, `Gold: ${store.gold}`, textStyle);
     this.livesText = this.add.text(220, 16, `Lives: ${store.lives}`, textStyle);
-    this.waveText = this.add.text(420, 16, `Wave: ${store.wave}/${store.totalWaves}`, textStyle);
-    this.stateText = this.add.text(900, 16, `State: ${store.gameState}`, textStyle);
+    this.waveText = this.add.text(
+      420,
+      16,
+      `Wave: ${store.wave}/${store.totalWaves}`,
+      textStyle,
+    );
+    this.stateText = this.add.text(
+      900,
+      16,
+      `State: ${store.gameState}`,
+      textStyle,
+    );
 
     // ── Tower selector bar ────────────────────────────────────────────────────
     this.archetypes.forEach((arch, i) => {
-      const t = this.add.text(40 + i * 280, 680, arch.label, {
-        color: '#f8fafc',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '16px',
-        backgroundColor: '#1d4ed8',
-        padding: { x: 8, y: 4 },
-      }).setInteractive();
+      const t = this.add
+        .text(40 + i * 280, 680, arch.label, {
+          color: '#f8fafc',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '16px',
+          backgroundColor: '#1d4ed8',
+          padding: { x: 8, y: 4 },
+        })
+        .setInteractive();
 
       t.on('pointerdown', () => {
-        const gameScene = this.scene.get(SCENE_KEYS.GAME) as unknown as { selectedArchetype: string };
+        const gameScene = this.scene.get(SCENE_KEYS.GAME) as unknown as {
+          selectedArchetype: string;
+        };
         gameScene.selectedArchetype = arch.key;
         this.selectedIndex = i;
         this.selectorTexts.forEach((st, j) => {
@@ -76,19 +99,27 @@ export class UIScene extends Phaser.Scene {
     // ── Wave preview ──────────────────────────────────────────────────────────
     // Right-aligned under the top bar, so it never collides with the upgrade
     // panel on the left. Composition comes straight from the wave data.
-    this.wavePreviewText = this.add.text(this.cameras.main.width - 16, 60, '', {
-      color: '#e2e8f0',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
-      backgroundColor: '#1e293b',
-      padding: { x: 8, y: 6 },
-      align: 'right',
-    }).setOrigin(1, 0);
+    this.wavePreviewText = this.add
+      .text(this.cameras.main.width - 16, 60, '', {
+        color: '#e2e8f0',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '14px',
+        backgroundColor: '#1e293b',
+        padding: { x: 8, y: 6 },
+        align: 'right',
+      })
+      .setOrigin(1, 0);
 
     // ── Keyboard shortcuts 1 / 2 / 3 ─────────────────────────────────────────
-    this.input.keyboard?.on('keydown-ONE',   () => this.selectorTexts[0]?.emit('pointerdown'));
-    this.input.keyboard?.on('keydown-TWO',   () => this.selectorTexts[1]?.emit('pointerdown'));
-    this.input.keyboard?.on('keydown-THREE', () => this.selectorTexts[2]?.emit('pointerdown'));
+    this.input.keyboard?.on('keydown-ONE', () =>
+      this.selectorTexts[0]?.emit('pointerdown'),
+    );
+    this.input.keyboard?.on('keydown-TWO', () =>
+      this.selectorTexts[1]?.emit('pointerdown'),
+    );
+    this.input.keyboard?.on('keydown-THREE', () =>
+      this.selectorTexts[2]?.emit('pointerdown'),
+    );
   }
 
   /**
@@ -101,7 +132,10 @@ export class UIScene extends Phaser.Scene {
     const composition = describeWave(WAVE_DEFINITIONS[wave - 1]);
     if (!composition) return '';
 
-    const heading = gameState === 'wave_active' ? `Wave ${wave} incoming` : `Next — Wave ${wave}`;
+    const heading =
+      gameState === 'wave_active'
+        ? `Wave ${wave} incoming`
+        : `Next — Wave ${wave}`;
     return `${heading}\n${composition}`;
   }
 
@@ -121,11 +155,13 @@ export class UIScene extends Phaser.Scene {
     this.selectorTexts.forEach((t, i) => {
       const arch = this.archetypes[i];
       const canAfford = gold >= arch.cost;
-      t.setAlpha(i === this.selectedIndex ? (canAfford ? 1 : 0.6) : (canAfford ? 1 : 0.4));
+      t.setAlpha(
+        i === this.selectedIndex ? (canAfford ? 1 : 0.6) : canAfford ? 1 : 0.4,
+      );
     });
 
     // ── Tower Upgrade Panel ──────────────────────────────────────────────────
-    this.upgradeTexts.forEach(t => t.destroy());
+    this.upgradeTexts.forEach((t) => t.destroy());
     this.upgradeTexts = [];
 
     const selectedUid = this.registry.get('selectedTowerUid') as string | null;
@@ -135,7 +171,7 @@ export class UIScene extends Phaser.Scene {
         upgradeSystem: TowerUpgradeSystem;
       };
 
-      const selectedTower = gs.store.towers.find(t => t.uid === selectedUid);
+      const selectedTower = gs.store.towers.find((t) => t.uid === selectedUid);
       if (selectedTower && gs.upgradeSystem) {
         const upgrades = gs.upgradeSystem;
         const def = selectedTower.definition;
@@ -166,7 +202,11 @@ export class UIScene extends Phaser.Scene {
             color: '#f8fafc',
             fontFamily: 'Arial, sans-serif',
             fontSize: '14px',
-            backgroundColor: atMax ? '#1f3d2b' : canAfford ? '#1e3a5f' : '#3a1a1a',
+            backgroundColor: atMax
+              ? '#1f3d2b'
+              : canAfford
+                ? '#1e3a5f'
+                : '#3a1a1a',
             padding: { x: 4, y: 2 },
           });
           this.upgradeTexts.push(t);

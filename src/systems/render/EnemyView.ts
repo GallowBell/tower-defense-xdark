@@ -92,7 +92,10 @@ export class EnemyView {
     // hits shows plating, whatever it happens to be.
     this.armor =
       enemy.armor > 0
-        ? scene.add.image(0, 0, TEXTURE_KEYS.enemyArmor).setScale(scale).setTint(ARMOR_COLOR)
+        ? scene.add
+            .image(0, 0, TEXTURE_KEYS.enemyArmor)
+            .setScale(scale)
+            .setTint(ARMOR_COLOR)
         : null;
 
     const barWidth = enemy.radius * 2;
@@ -133,9 +136,18 @@ export class EnemyView {
     this.container.setPosition(enemy.x, enemy.y);
 
     const desired = desiredFacing(dx, dy, this.facing);
-    this.facing = Phaser.Math.Angle.RotateTo(this.facing, desired, TURN_RATE * dtSeconds);
+    this.facing = Phaser.Math.Angle.RotateTo(
+      this.facing,
+      desired,
+      TURN_RATE * dtSeconds,
+    );
 
-    advanceEnemyMotion(this.motion, Math.hypot(dx, dy), dtSeconds, this.profile);
+    advanceEnemyMotion(
+      this.motion,
+      Math.hypot(dx, dy),
+      dtSeconds,
+      this.profile,
+    );
     this.applyGait();
 
     if (enemy.hp !== this.hpDrawnFor) this.syncHealthBar(enemy);
@@ -206,8 +218,14 @@ export class EnemyView {
     const offsetY = Math.cos(this.facing) * sway;
     const scale = this.bodyScale * bounce;
 
-    this.body.setPosition(offsetX, offsetY).setRotation(this.facing).setScale(scale);
-    this.armor?.setPosition(offsetX, offsetY).setRotation(this.facing).setScale(scale);
+    this.body
+      .setPosition(offsetX, offsetY)
+      .setRotation(this.facing)
+      .setScale(scale);
+    this.armor
+      ?.setPosition(offsetX, offsetY)
+      .setRotation(this.facing)
+      .setScale(scale);
 
     if (this.motion.flashLife > 0) this.applyFlash();
   }
@@ -228,7 +246,10 @@ export class EnemyView {
     this.hpDrawnFor = enemy.hp;
     const ratio = Phaser.Math.Clamp(enemy.hp / enemy.maxHp, 0, 1);
     this.barFill
-      .setScale(pixelScaleFor(enemy.radius * 2 * ratio), pixelScaleFor(BAR_HEIGHT))
+      .setScale(
+        pixelScaleFor(enemy.radius * 2 * ratio),
+        pixelScaleFor(BAR_HEIGHT),
+      )
       .setTint(hpBarColor(ratio))
       .setVisible(ratio > 0);
   }

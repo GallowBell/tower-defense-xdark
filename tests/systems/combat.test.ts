@@ -118,9 +118,19 @@ describe('TargetingSystem', () => {
   it('returns enemy with highest waypointIndex, not the closest one', () => {
     const tower = makeTower({ worldX: 0, worldY: 0 });
     // enemyA is closer but further back on path
-    const enemyA = makeEnemy({ uid: 'enemy_a' as EnemyId, x: 10, y: 0, waypointIndex: 1 });
+    const enemyA = makeEnemy({
+      uid: 'enemy_a' as EnemyId,
+      x: 10,
+      y: 0,
+      waypointIndex: 1,
+    });
     // enemyB is farther but ahead on path
-    const enemyB = makeEnemy({ uid: 'enemy_b' as EnemyId, x: 150, y: 0, waypointIndex: 5 });
+    const enemyB = makeEnemy({
+      uid: 'enemy_b' as EnemyId,
+      x: 150,
+      y: 0,
+      waypointIndex: 5,
+    });
     // both within range=200
     const result = ts.findTarget(tower, [enemyA, enemyB]);
     expect(result).toBe(enemyB);
@@ -130,8 +140,18 @@ describe('TargetingSystem', () => {
   it('tie-breaks on waypointIndex by picking the enemy closer to the tower', () => {
     const tower = makeTower({ worldX: 0, worldY: 0 });
     // Both at same waypointIndex, different distances
-    const enemyClose = makeEnemy({ uid: 'enemy_close' as EnemyId, x: 50, y: 0, waypointIndex: 3 });
-    const enemyFar = makeEnemy({ uid: 'enemy_far' as EnemyId, x: 120, y: 0, waypointIndex: 3 });
+    const enemyClose = makeEnemy({
+      uid: 'enemy_close' as EnemyId,
+      x: 50,
+      y: 0,
+      waypointIndex: 3,
+    });
+    const enemyFar = makeEnemy({
+      uid: 'enemy_far' as EnemyId,
+      x: 120,
+      y: 0,
+      waypointIndex: 3,
+    });
     const result = ts.findTarget(tower, [enemyFar, enemyClose]);
     expect(result).toBe(enemyClose);
   });
@@ -139,8 +159,19 @@ describe('TargetingSystem', () => {
   // ── 8. Dead enemies ignored even with high waypointIndex ─────────────────
   it('ignores dead enemies even if in range with high waypointIndex', () => {
     const tower = makeTower({ worldX: 0, worldY: 0 });
-    const deadEnemy = makeEnemy({ uid: 'enemy_dead' as EnemyId, x: 10, y: 0, waypointIndex: 99, dead: true });
-    const liveEnemy = makeEnemy({ uid: 'enemy_live' as EnemyId, x: 50, y: 0, waypointIndex: 1 });
+    const deadEnemy = makeEnemy({
+      uid: 'enemy_dead' as EnemyId,
+      x: 10,
+      y: 0,
+      waypointIndex: 99,
+      dead: true,
+    });
+    const liveEnemy = makeEnemy({
+      uid: 'enemy_live' as EnemyId,
+      x: 50,
+      y: 0,
+      waypointIndex: 1,
+    });
     const result = ts.findTarget(tower, [deadEnemy, liveEnemy]);
     expect(result).toBe(liveEnemy);
   });
@@ -148,7 +179,11 @@ describe('TargetingSystem', () => {
   // ── 9. Boundary: enemy exactly at range distance ──────────────────────────
   it('includes enemy at exactly the tower range boundary', () => {
     // range = 200, place enemy exactly 200px away
-    const tower = makeTower({ worldX: 0, worldY: 0, definition: makeTower().definition });
+    const tower = makeTower({
+      worldX: 0,
+      worldY: 0,
+      definition: makeTower().definition,
+    });
     const enemy = makeEnemy({ x: 200, y: 0 }); // dist = 200 exactly
     // dist (200) is NOT > range (200), so it should be in range
     expect(ts.findTarget(tower, [enemy])).toBe(enemy);
@@ -305,8 +340,18 @@ describe('CombatSystem', () => {
 
   // ── 6. Multiple towers fire independently in same tick ───────────────────
   it('multiple towers fire independently in the same tick', () => {
-    const tower1 = makeTower({ uid: 'tower_1', worldX: 0, worldY: 0, cooldown: 0 });
-    const tower2 = makeTower({ uid: 'tower_2', worldX: 200, worldY: 0, cooldown: 0 });
+    const tower1 = makeTower({
+      uid: 'tower_1',
+      worldX: 0,
+      worldY: 0,
+      cooldown: 0,
+    });
+    const tower2 = makeTower({
+      uid: 'tower_2',
+      worldX: 200,
+      worldY: 0,
+      cooldown: 0,
+    });
     // One enemy in range of tower1 only (at x=50, tower2 is at x=200, range=200 → dist=150, in range!)
     // Put enemy far from tower2: x=50, tower2 at x=200 → dist=150 < 200 — both can hit
     // Let's put a second enemy only near tower2
@@ -344,12 +389,22 @@ describe('CombatSystem', () => {
   // ── 9. Dead enemy is not targeted again in same tick ─────────────────────
   it('dead enemy is not targeted after being killed by another tower in same tick', () => {
     // Two towers, same target, enemy has 20 hp (one-shot kill with damage=20)
-    const tower1 = makeTower({ uid: 'tower_1', worldX: 0, worldY: 0, cooldown: 0 });
-    const tower2 = makeTower({ uid: 'tower_2', worldX: 10, worldY: 0, cooldown: 0 });
+    const tower1 = makeTower({
+      uid: 'tower_1',
+      worldX: 0,
+      worldY: 0,
+      cooldown: 0,
+    });
+    const tower2 = makeTower({
+      uid: 'tower_2',
+      worldX: 10,
+      worldY: 0,
+      cooldown: 0,
+    });
     const enemy = makeEnemy({ x: 50, y: 0, hp: 20, maxHp: 20 });
     const events = cs.tick([tower1, tower2], [enemy], 0.016);
     // tower1 kills the enemy; tower2 should not fire at a dead enemy
-    const killEvents = events.filter(ev => ev.killed);
+    const killEvents = events.filter((ev) => ev.killed);
     expect(killEvents).toHaveLength(1);
     // tower2 should produce 0 events because its target was dead
     expect(events).toHaveLength(1);
@@ -373,8 +428,18 @@ describe('CombatSystem', () => {
   // ── 12. Tower fires exactly once per tick ─────────────────────────────────
   it('tower fires at most once per tick regardless of dt', () => {
     const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0 });
-    const enemy1 = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 50, y: 0, waypointIndex: 5 });
-    const enemy2 = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 80, y: 0, waypointIndex: 4 });
+    const enemy1 = makeEnemy({
+      uid: 'enemy_1' as EnemyId,
+      x: 50,
+      y: 0,
+      waypointIndex: 5,
+    });
+    const enemy2 = makeEnemy({
+      uid: 'enemy_2' as EnemyId,
+      x: 80,
+      y: 0,
+      waypointIndex: 4,
+    });
     const events = cs.tick([tower], [enemy1, enemy2], 1.0); // large dt
     // Tower fires once (not twice even though dt=1.0 >> cooldown period)
     expect(events).toHaveLength(1);
@@ -453,14 +518,18 @@ describe('DamageSystem armor', () => {
 
   it('blunts a Gunner against armor far more than a Cannon', () => {
     // The whole point of armor: it gives each tower an enemy.
-    const gunner = makeTower({ definition: { ...DEFAULT_TOWER_DEF, damage: 8 } });
-    const cannon = makeTower({ definition: { ...DEFAULT_TOWER_DEF, damage: 80 } });
+    const gunner = makeTower({
+      definition: { ...DEFAULT_TOWER_DEF, damage: 8 },
+    });
+    const cannon = makeTower({
+      definition: { ...DEFAULT_TOWER_DEF, damage: 80 },
+    });
     const brute = () => makeEnemy({ hp: 300, armor: 6 });
 
     const gunnerHit = ds.applyHit(gunner, brute());
     const cannonHit = ds.applyHit(cannon, brute());
 
-    expect(gunnerHit.damageDealt).toBe(2);  // 75% of the pellet absorbed
+    expect(gunnerHit.damageDealt).toBe(2); // 75% of the pellet absorbed
     expect(cannonHit.damageDealt).toBe(74); // barely noticed
   });
 
@@ -480,7 +549,9 @@ describe('DamageSystem splash', () => {
 
   /** A tower with a 60px blast radius, like the Cannon. */
   function splashTower(damage = 20): TowerState {
-    return makeTower({ definition: { ...DEFAULT_TOWER_DEF, damage, splashRadius: 60 } });
+    return makeTower({
+      definition: { ...DEFAULT_TOWER_DEF, damage, splashRadius: 60 },
+    });
   }
 
   beforeEach(() => {
@@ -495,7 +566,12 @@ describe('DamageSystem splash', () => {
   it('does not splash when splashRadius is 0', () => {
     const tower = makeTower(); // splashRadius 0
     const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
-    const neighbour = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 10, y: 0, hp: 80 });
+    const neighbour = makeEnemy({
+      uid: 'enemy_1' as EnemyId,
+      x: 10,
+      y: 0,
+      hp: 80,
+    });
 
     const result = ds.applyHit(tower, primary, [primary, neighbour]);
 
@@ -506,9 +582,18 @@ describe('DamageSystem splash', () => {
   it('damages every live enemy inside the blast radius', () => {
     const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
     const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 50, y: 0, hp: 80 });
-    const alsoNear = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 0, y: 30, hp: 80 });
+    const alsoNear = makeEnemy({
+      uid: 'enemy_2' as EnemyId,
+      x: 0,
+      y: 30,
+      hp: 80,
+    });
 
-    const result = ds.applyHit(splashTower(), primary, [primary, near, alsoNear]);
+    const result = ds.applyHit(splashTower(), primary, [
+      primary,
+      near,
+      alsoNear,
+    ]);
 
     expect(result.splashHits).toHaveLength(2);
     expect(near.hp).toBe(60);
@@ -526,7 +611,12 @@ describe('DamageSystem splash', () => {
   });
 
   it('never counts the primary target as its own splash victim', () => {
-    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 80 });
+    const primary = makeEnemy({
+      uid: 'enemy_0' as EnemyId,
+      x: 0,
+      y: 0,
+      hp: 80,
+    });
 
     const result = ds.applyHit(splashTower(), primary, [primary]);
 
@@ -536,21 +626,59 @@ describe('DamageSystem splash', () => {
 
   it('skips enemies that are already dead or leaked', () => {
     const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0 });
-    const corpse = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 10, y: 0, hp: 0, dead: true });
-    const escaped = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 10, y: 0, hp: 80, leaked: true });
+    const corpse = makeEnemy({
+      uid: 'enemy_1' as EnemyId,
+      x: 10,
+      y: 0,
+      hp: 0,
+      dead: true,
+    });
+    const escaped = makeEnemy({
+      uid: 'enemy_2' as EnemyId,
+      x: 10,
+      y: 0,
+      hp: 80,
+      leaked: true,
+    });
 
-    const result = ds.applyHit(splashTower(), primary, [primary, corpse, escaped]);
+    const result = ds.applyHit(splashTower(), primary, [
+      primary,
+      corpse,
+      escaped,
+    ]);
 
     expect(result.splashHits).toHaveLength(0);
     expect(escaped.hp).toBe(80);
   });
 
   it('pays out the reward for every enemy the blast kills', () => {
-    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 10, reward: 10 });
-    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 10, reward: 8 });
-    const alsoNear = makeEnemy({ uid: 'enemy_2' as EnemyId, x: 40, y: 0, hp: 10, reward: 25 });
+    const primary = makeEnemy({
+      uid: 'enemy_0' as EnemyId,
+      x: 0,
+      y: 0,
+      hp: 10,
+      reward: 10,
+    });
+    const near = makeEnemy({
+      uid: 'enemy_1' as EnemyId,
+      x: 20,
+      y: 0,
+      hp: 10,
+      reward: 8,
+    });
+    const alsoNear = makeEnemy({
+      uid: 'enemy_2' as EnemyId,
+      x: 40,
+      y: 0,
+      hp: 10,
+      reward: 25,
+    });
 
-    const result = ds.applyHit(splashTower(), primary, [primary, near, alsoNear]);
+    const result = ds.applyHit(splashTower(), primary, [
+      primary,
+      near,
+      alsoNear,
+    ]);
 
     expect(result.killed).toBe(true);
     expect(result.splashKills).toHaveLength(2);
@@ -558,8 +686,20 @@ describe('DamageSystem splash', () => {
   });
 
   it('pays out splash kills even when the primary target survives', () => {
-    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 500, reward: 10 });
-    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 10, reward: 8 });
+    const primary = makeEnemy({
+      uid: 'enemy_0' as EnemyId,
+      x: 0,
+      y: 0,
+      hp: 500,
+      reward: 10,
+    });
+    const near = makeEnemy({
+      uid: 'enemy_1' as EnemyId,
+      x: 20,
+      y: 0,
+      hp: 10,
+      reward: 8,
+    });
 
     const result = ds.applyHit(splashTower(), primary, [primary, near]);
 
@@ -569,8 +709,20 @@ describe('DamageSystem splash', () => {
   });
 
   it('applies each victim armor separately inside the blast', () => {
-    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 80, armor: 0 });
-    const armoured = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 80, armor: 6 });
+    const primary = makeEnemy({
+      uid: 'enemy_0' as EnemyId,
+      x: 0,
+      y: 0,
+      hp: 80,
+      armor: 0,
+    });
+    const armoured = makeEnemy({
+      uid: 'enemy_1' as EnemyId,
+      x: 20,
+      y: 0,
+      hp: 80,
+      armor: 6,
+    });
 
     const result = ds.applyHit(splashTower(), primary, [primary, armoured]);
 
@@ -579,7 +731,12 @@ describe('DamageSystem splash', () => {
   });
 
   it('marks blast victims dead so targeting drops them', () => {
-    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 0, y: 0, hp: 10 });
+    const primary = makeEnemy({
+      uid: 'enemy_0' as EnemyId,
+      x: 0,
+      y: 0,
+      hp: 10,
+    });
     const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 20, y: 0, hp: 10 });
 
     ds.applyHit(splashTower(), primary, [primary, near]);
@@ -631,7 +788,12 @@ describe('CombatSystem target tracking', () => {
   });
 
   it('clears the target when nothing is in range', () => {
-    const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0, targetUid: 'enemy_1' });
+    const tower = makeTower({
+      worldX: 0,
+      worldY: 0,
+      cooldown: 0,
+      targetUid: 'enemy_1',
+    });
 
     cs.tick([tower], [makeEnemy({ x: 5000, y: 5000 })], 0.016);
 
@@ -653,8 +815,18 @@ describe('CombatSystem target tracking', () => {
 
   it('switches to whichever enemy is furthest along the path', () => {
     const tower = makeTower({ worldX: 0, worldY: 0, cooldown: 0 });
-    const behind = makeEnemy({ uid: 'enemy_a' as EnemyId, x: 40, y: 0, waypointIndex: 1 });
-    const ahead = makeEnemy({ uid: 'enemy_b' as EnemyId, x: 60, y: 0, waypointIndex: 4 });
+    const behind = makeEnemy({
+      uid: 'enemy_a' as EnemyId,
+      x: 40,
+      y: 0,
+      waypointIndex: 1,
+    });
+    const ahead = makeEnemy({
+      uid: 'enemy_b' as EnemyId,
+      x: 60,
+      y: 0,
+      waypointIndex: 4,
+    });
 
     cs.tick([tower], [behind, ahead], 0.016);
 
@@ -684,8 +856,20 @@ describe('CombatSystem splash', () => {
       cooldown: 0,
       definition: { ...DEFAULT_TOWER_DEF, splashRadius: 60 },
     });
-    const primary = makeEnemy({ uid: 'enemy_0' as EnemyId, x: 50, y: 0, hp: 10, reward: 10 });
-    const near = makeEnemy({ uid: 'enemy_1' as EnemyId, x: 60, y: 0, hp: 10, reward: 8 });
+    const primary = makeEnemy({
+      uid: 'enemy_0' as EnemyId,
+      x: 50,
+      y: 0,
+      hp: 10,
+      reward: 10,
+    });
+    const near = makeEnemy({
+      uid: 'enemy_1' as EnemyId,
+      x: 60,
+      y: 0,
+      hp: 10,
+      reward: 8,
+    });
 
     const events = cs.tick([tower], [primary, near], 0.016);
 

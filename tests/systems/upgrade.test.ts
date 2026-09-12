@@ -137,7 +137,9 @@ describe('TowerUpgradeSystem', () => {
 
     expect(tower.definition.cost).toBe(175);
     expect(tower.definition.critRate).toBe(TOWER_DEFINITIONS.heavy.critRate);
-    expect(tower.definition.splashRadius).toBe(TOWER_DEFINITIONS.heavy.splashRadius);
+    expect(tower.definition.splashRadius).toBe(
+      TOWER_DEFINITIONS.heavy.splashRadius,
+    );
     expect(tower.definition.color).toBe(TOWER_DEFINITIONS.heavy.color);
   });
 
@@ -155,7 +157,9 @@ describe('TowerUpgradeSystem', () => {
     maxOut(upgrades, tower);
 
     expect(tower.baseDefinition.damage).toBe(20);
-    expect(tower.definition.damage).toBeGreaterThan(tower.baseDefinition.damage);
+    expect(tower.definition.damage).toBeGreaterThan(
+      tower.baseDefinition.damage,
+    );
   });
 
   it('upgrades one tower without touching its siblings', () => {

@@ -47,7 +47,7 @@ export class GameStateStore {
   }
 
   removeTower(uid: string): void {
-    this.towers = this.towers.filter(t => t.uid !== uid);
+    this.towers = this.towers.filter((t) => t.uid !== uid);
   }
 
   nextWave(): void {

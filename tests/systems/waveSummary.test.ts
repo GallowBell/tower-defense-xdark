@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
-import { summarizeWave, describeWave } from '../../src/systems/waves/waveSummary';
+import {
+  summarizeWave,
+  describeWave,
+} from '../../src/systems/waves/waveSummary';
 import { WAVE_DEFINITIONS } from '../../src/systems/waves/waveDefinitions';
 import type { WaveDefinition } from '../../src/systems/waves/waveDefinitions';
 
@@ -10,9 +13,13 @@ function wave(entries: WaveDefinition['entries']): WaveDefinition {
 
 describe('summarizeWave', () => {
   it('counts a single group', () => {
-    const result = summarizeWave(wave([{ archetype: 'basic', count: 8, interval: 1 }]));
+    const result = summarizeWave(
+      wave([{ archetype: 'basic', count: 8, interval: 1 }]),
+    );
 
-    expect(result).toEqual([{ archetype: 'basic', displayName: 'Grunt', count: 8 }]);
+    expect(result).toEqual([
+      { archetype: 'basic', displayName: 'Grunt', count: 8 },
+    ]);
   });
 
   it('keeps archetypes in the order they first appear', () => {
@@ -23,7 +30,7 @@ describe('summarizeWave', () => {
       ]),
     );
 
-    expect(result.map(e => e.archetype)).toEqual(['fast', 'basic']);
+    expect(result.map((e) => e.archetype)).toEqual(['fast', 'basic']);
   });
 
   it('merges repeated archetypes into one row', () => {
@@ -37,7 +44,11 @@ describe('summarizeWave', () => {
     );
 
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ archetype: 'basic', displayName: 'Grunt', count: 8 });
+    expect(result[0]).toEqual({
+      archetype: 'basic',
+      displayName: 'Grunt',
+      count: 8,
+    });
   });
 
   it('handles an empty wave', () => {
@@ -47,7 +58,9 @@ describe('summarizeWave', () => {
 
 describe('describeWave', () => {
   it('renders one line per wave', () => {
-    expect(describeWave(WAVE_DEFINITIONS[7])).toBe('10x Grunt, 8x Runner, 4x Brute');
+    expect(describeWave(WAVE_DEFINITIONS[7])).toBe(
+      '10x Grunt, 8x Runner, 4x Brute',
+    );
   });
 
   it('renders a single-archetype wave without separators', () => {

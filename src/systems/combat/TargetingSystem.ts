@@ -38,7 +38,10 @@ export class TargetingSystem {
       } else if (enemy.waypointIndex > best.waypointIndex) {
         best = enemy;
         bestDist = dist;
-      } else if (enemy.waypointIndex === best.waypointIndex && dist < bestDist) {
+      } else if (
+        enemy.waypointIndex === best.waypointIndex &&
+        dist < bestDist
+      ) {
         best = enemy;
         bestDist = dist;
       }

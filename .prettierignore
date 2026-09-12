@@ -1,0 +1,16 @@
+# Build output and generated reports. These are not source, and letting
+# format:check reach them would fail CI on files nobody wrote.
+dist/
+coverage/
+.vite/
+playwright-report/
+test-results/
+blob-report/
+
+# Emitted by tsc from the .ts configs; gitignored for the same reason.
+vite.config.js
+vite.config.d.ts
+vitest.config.js
+vitest.config.d.ts
+
+package-lock.json

@@ -21,10 +21,10 @@ function tile(col: number, row: number): { x: number; y: number } {
  */
 function watchForErrors(page: Page): string[] {
   const errors: string[] = [];
-  page.on('console', m => {
+  page.on('console', (m) => {
     if (m.type() === 'error') errors.push(`console: ${m.text()}`);
   });
-  page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   return errors;
 }
 
@@ -78,7 +78,9 @@ test.describe('browser smoke', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the board moves while running and is static while paused', async ({ page }) => {
+  test('the board moves while running and is static while paused', async ({
+    page,
+  }) => {
     const errors = watchForErrors(page);
 
     await bootToMenu(page);

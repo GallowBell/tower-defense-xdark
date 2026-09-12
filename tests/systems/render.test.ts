@@ -87,7 +87,9 @@ describe('texture keys', () => {
     const bases = ARCHETYPES.map(towerBaseTextureKey);
     const barrels = ARCHETYPES.map(towerBarrelTextureKey);
 
-    expect(new Set([...bases, ...barrels]).size).toBe(bases.length + barrels.length);
+    expect(new Set([...bases, ...barrels]).size).toBe(
+      bases.length + barrels.length,
+    );
   });
 });
 
@@ -125,7 +127,9 @@ describe('enemy texture keys', () => {
     const towerKeys = ARCHETYPES.map(towerBaseTextureKey);
     const enemyKeys = ENEMY_ARCHETYPES.map(enemyBodyTextureKey);
 
-    expect(new Set([...towerKeys, ...enemyKeys]).size).toBe(towerKeys.length + enemyKeys.length);
+    expect(new Set([...towerKeys, ...enemyKeys]).size).toBe(
+      towerKeys.length + enemyKeys.length,
+    );
   });
 
   it('namespaces the armour and pixel keys too', () => {
@@ -150,11 +154,16 @@ describe('enemyScaleFor', () => {
   });
 
   it('keeps the size order of the enemies themselves', () => {
-    const scales = ENEMY_ARCHETYPES.map(a => enemyScaleFor(ENEMY_DEFINITIONS[a].radius));
-    const radii = ENEMY_ARCHETYPES.map(a => ENEMY_DEFINITIONS[a].radius);
+    const scales = ENEMY_ARCHETYPES.map((a) =>
+      enemyScaleFor(ENEMY_DEFINITIONS[a].radius),
+    );
+    const radii = ENEMY_ARCHETYPES.map((a) => ENEMY_DEFINITIONS[a].radius);
 
     expect([...scales].sort((x, y) => x - y)).toEqual(
-      radii.slice().sort((x, y) => x - y).map(enemyScaleFor),
+      radii
+        .slice()
+        .sort((x, y) => x - y)
+        .map(enemyScaleFor),
     );
   });
 });
@@ -189,8 +198,12 @@ describe('barrelTipDistance', () => {
   it('reaches furthest on the Gunner and least on the Cannon', () => {
     // Long thin autocannon versus stubby mortar — the whole point of splitting
     // one shared barrel into three.
-    expect(barrelTipDistance('fast')).toBeGreaterThan(barrelTipDistance('basic'));
-    expect(barrelTipDistance('basic')).toBeGreaterThan(barrelTipDistance('heavy'));
+    expect(barrelTipDistance('fast')).toBeGreaterThan(
+      barrelTipDistance('basic'),
+    );
+    expect(barrelTipDistance('basic')).toBeGreaterThan(
+      barrelTipDistance('heavy'),
+    );
   });
 
   it('stays within the shortest tower range, so a barrel never outreaches its gun', () => {
@@ -228,7 +241,9 @@ describe('path tiles', () => {
   });
 
   it('gives every variant a distinct texture key', () => {
-    const keys = Array.from({ length: PATH_TILE_VARIANTS }, (_, i) => pathTileTextureKey(i));
+    const keys = Array.from({ length: PATH_TILE_VARIANTS }, (_, i) =>
+      pathTileTextureKey(i),
+    );
 
     expect(new Set(keys).size).toBe(PATH_TILE_VARIANTS);
     for (const key of keys) expect(key).toMatch(/^td-tile-path-/);

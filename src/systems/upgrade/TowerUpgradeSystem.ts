@@ -37,16 +37,23 @@ export class TowerUpgradeSystem {
    * cannot drift as the tower's current stats change.
    */
   getUpgradeCost(tower: TowerState): number {
-    return Math.floor(tower.baseDefinition.cost * DIFFICULTY.upgradeCostRatio * tower.level);
+    return Math.floor(
+      tower.baseDefinition.cost * DIFFICULTY.upgradeCostRatio * tower.level,
+    );
   }
 
   /** Stats an archetype has at `level`. Level 1 returns the base stats. */
   statsAtLevel(base: TowerDefinition, level: number): LeveledStats {
     const steps = Math.max(0, level - 1);
     return {
-      damage: Math.floor(base.damage * (1 + DIFFICULTY.upgradeDamagePerLevel * steps)),
-      range: Math.floor(base.range * (1 + DIFFICULTY.upgradeRangePerLevel * steps)),
-      fireRate: base.fireRate * (1 + DIFFICULTY.upgradeFireRatePerLevel * steps),
+      damage: Math.floor(
+        base.damage * (1 + DIFFICULTY.upgradeDamagePerLevel * steps),
+      ),
+      range: Math.floor(
+        base.range * (1 + DIFFICULTY.upgradeRangePerLevel * steps),
+      ),
+      fireRate:
+        base.fireRate * (1 + DIFFICULTY.upgradeFireRatePerLevel * steps),
     };
   }
 
@@ -83,7 +90,10 @@ export class TowerUpgradeSystem {
 
     // Rebuilt from the base every time: cost, colour, crit and splash carry
     // over untouched, and the level is the only thing the stats depend on.
-    tower.definition = { ...tower.baseDefinition, ...this.statsAtLevel(tower.baseDefinition, level) };
+    tower.definition = {
+      ...tower.baseDefinition,
+      ...this.statsAtLevel(tower.baseDefinition, level),
+    };
     tower.level = level;
     tower.investedGold += cost;
     return true;

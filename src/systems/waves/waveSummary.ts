@@ -40,6 +40,6 @@ export function summarizeWave(wave: WaveDefinition): WaveSummaryEntry[] {
 export function describeWave(wave: WaveDefinition | undefined): string {
   if (!wave) return '';
   return summarizeWave(wave)
-    .map(e => `${e.count}x ${e.displayName}`)
+    .map((e) => `${e.count}x ${e.displayName}`)
     .join(', ');
 }

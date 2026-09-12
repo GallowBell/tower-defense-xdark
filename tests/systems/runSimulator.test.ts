@@ -15,8 +15,16 @@ const MAP = MAP_DEFINITIONS.map01;
 
 /** One Grunt, then one more — short enough to run a whole wave in a test. */
 const TWO_WAVES: WaveDefinition[] = [
-  { index: 0, entries: [{ archetype: 'basic', count: 1, interval: 0.5 }], goldBonus: 20 },
-  { index: 1, entries: [{ archetype: 'basic', count: 1, interval: 0.5 }], goldBonus: 30 },
+  {
+    index: 0,
+    entries: [{ archetype: 'basic', count: 1, interval: 0.5 }],
+    goldBonus: 20,
+  },
+  {
+    index: 1,
+    entries: [{ archetype: 'basic', count: 1, interval: 0.5 }],
+    goldBonus: 30,
+  },
 ];
 
 /** Advance the sim by `seconds` of simulated time. */
@@ -57,7 +65,9 @@ describe('RunSimulator', () => {
 
     expect(result.success).toBe(true);
     expect(sim.store.towers).toHaveLength(1);
-    expect(sim.store.gold).toBe(BALANCE.startingGold - TOWER_DEFINITIONS.fast.cost);
+    expect(sim.store.gold).toBe(
+      BALANCE.startingGold - TOWER_DEFINITIONS.fast.cost,
+    );
   });
 
   it('refuses to build on the path and charges nothing', () => {
@@ -171,7 +181,11 @@ describe('RunSimulator', () => {
 
   it('spawns the wave composition it was given', () => {
     const spawned: EnemyState[] = [];
-    const sim = new RunSimulator(MAP, { onSpawn: e => spawned.push(e) }, TWO_WAVES);
+    const sim = new RunSimulator(
+      MAP,
+      { onSpawn: (e) => spawned.push(e) },
+      TWO_WAVES,
+    );
 
     sim.startNextWave();
     run(sim, 2);
@@ -182,7 +196,11 @@ describe('RunSimulator', () => {
 
   it('scales enemy HP with the wave number', () => {
     const spawned: EnemyState[] = [];
-    const sim = new RunSimulator(MAP, { onSpawn: e => spawned.push(e) }, TWO_WAVES);
+    const sim = new RunSimulator(
+      MAP,
+      { onSpawn: (e) => spawned.push(e) },
+      TWO_WAVES,
+    );
 
     sim.startNextWave();
     sim.runActiveWave(120); // wave 1 leaks, no towers
@@ -198,7 +216,11 @@ describe('RunSimulator', () => {
 
   it('pays the wave bonus, scaled, when a wave is cleared', () => {
     const cleared: number[] = [];
-    const sim = new RunSimulator(MAP, { onWaveCleared: w => cleared.push(w) }, TWO_WAVES);
+    const sim = new RunSimulator(
+      MAP,
+      { onWaveCleared: (w) => cleared.push(w) },
+      TWO_WAVES,
+    );
     sim.placeTower(9, 3, 'heavy'); // enough to kill one Grunt
     const goldAfterBuying = sim.store.gold;
 
@@ -216,7 +238,11 @@ describe('RunSimulator', () => {
 
   it('charges exactly one life per leaked enemy', () => {
     const leaked: EnemyState[] = [];
-    const sim = new RunSimulator(MAP, { onLeak: e => leaked.push(e) }, TWO_WAVES);
+    const sim = new RunSimulator(
+      MAP,
+      { onLeak: (e) => leaked.push(e) },
+      TWO_WAVES,
+    );
 
     sim.startNextWave();
     sim.runActiveWave(120); // no towers — the Grunt walks the whole path
@@ -250,15 +276,23 @@ describe('RunSimulator', () => {
 
   it('reports a shot through the hook, and banks its reward once', () => {
     const shots: number[] = [];
-    const sim = new RunSimulator(MAP, { onShot: s => shots.push(s.goldEarned) }, TWO_WAVES);
+    const sim = new RunSimulator(
+      MAP,
+      { onShot: (s) => shots.push(s.goldEarned) },
+      TWO_WAVES,
+    );
     sim.placeTower(9, 3, 'heavy');
     const goldAfterBuying = sim.store.gold;
 
     sim.startNextWave();
     sim.runActiveWave(120);
 
-    expect(shots.filter(g => g > 0)).toEqual([ENEMY_DEFINITIONS.basic.reward]);
-    expect(sim.store.gold - goldAfterBuying).toBe(ENEMY_DEFINITIONS.basic.reward + 20);
+    expect(shots.filter((g) => g > 0)).toEqual([
+      ENEMY_DEFINITIONS.basic.reward,
+    ]);
+    expect(sim.store.gold - goldAfterBuying).toBe(
+      ENEMY_DEFINITIONS.basic.reward + 20,
+    );
   });
 
   // ── Determinism ─────────────────────────────────────────────────────────────
