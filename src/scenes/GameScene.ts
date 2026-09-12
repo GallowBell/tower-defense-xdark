@@ -10,10 +10,18 @@ import type { EnemyState } from '../types/enemy';
 import type { TowerArchetype } from '../types/tower';
 import { worldToGrid, tileRect, getTileType } from '../utils/grid';
 import { TowerView } from '../systems/render/TowerView';
+import {
+  TEXTURE_KEYS,
+  pathTileTextureKey,
+  pathVariantAt,
+} from '../systems/render/textures';
 import { FloatingTextPool } from '../systems/render/FloatingTextPool';
+import { BuildGhost } from '../systems/render/BuildGhost';
+import { validatePlacement } from '../systems/placement/PlacementSystem';
 import { SplashRingPool } from '../systems/render/SplashRingPool';
 import { EnemyView } from '../systems/render/EnemyView';
 import { ProjectileSystem } from '../systems/render/ProjectileSystem';
+import { projectileStyleFor, trailPuff } from '../systems/render/projectileStyle';
 import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { SkinManager } from '../systems/skins/SkinManager';
 import { SoundManager } from '../systems/audio/SoundManager';
@@ -85,6 +93,17 @@ export class GameScene extends Phaser.Scene {
   /** Tower under the pointer, drawn during the render phase. */
   private hoveredTowerUid: string | null = null;
 
+  /** Preview of the tower the player would build where they are pointing. */
+  private buildGhost!: BuildGhost;
+  /**
+   * Last known pointer position in world space.
+   *
+   * Kept rather than read on demand because the preview has to answer to more
+   * than pointer movement: switching archetype with 1/2/3, or earning the gold
+   * mid-wave, both change the verdict without the mouse going anywhere.
+   */
+  private pointerWorld: { x: number; y: number } | null = null;
+
   // ── QoL: Speed control ────────────────────────────────────────────────────
   private speedMultiplier: number = 1;
   private speedText!: Phaser.GameObjects.Text;
@@ -109,6 +128,7 @@ export class GameScene extends Phaser.Scene {
     this.simAccumulator = 0;
     this.lastSimulatedSeconds = 0;
     this.hoveredTowerUid = null;
+    this.pointerWorld = null;
     this.towerViews = new Map();
     this.pauseOverlayObjs = [];
 
@@ -144,6 +164,7 @@ export class GameScene extends Phaser.Scene {
     this.projectileGraphics = this.add.graphics().setDepth(RENDER_DEPTH.projectiles);
     this.floatingText = new FloatingTextPool(this);
     this.splashRings = new SplashRingPool(this);
+    this.buildGhost = new BuildGhost(this);
 
     // ── 4d. Tower selection ───────────────────────────────────────────────────
     this.selectedTowerUid = null;
@@ -167,10 +188,18 @@ export class GameScene extends Phaser.Scene {
         const cx = rect.x + rect.w / 2;
         const cy = rect.y + rect.h / 2;
 
+        // Textured tiles rather than flat rectangles. The colours still come
+        // from GAME_COLORS — the textures are white and carry only the shading.
         if (tileType === 'path') {
-          this.add.rectangle(cx, cy, rect.w, rect.h, GAME_COLORS.path, 0.85);
+          this.add
+            .image(cx, cy, pathTileTextureKey(pathVariantAt(col, row)))
+            .setTint(GAME_COLORS.path)
+            .setDepth(RENDER_DEPTH.tiles);
         } else if (tileType === 'buildable') {
-          this.add.rectangle(cx, cy, rect.w, rect.h, GAME_COLORS.buildZone, 0.35);
+          this.add
+            .image(cx, cy, TEXTURE_KEYS.tileBuild)
+            .setTint(GAME_COLORS.buildZone)
+            .setDepth(RENDER_DEPTH.tiles);
         }
       }
     }
@@ -232,6 +261,8 @@ export class GameScene extends Phaser.Scene {
     // Only records what is hovered — drawing happens in drawScene(), because
     // the render phase clears this layer every frame.
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      this.pointerWorld = { x: pointer.worldX, y: pointer.worldY };
+
       const hoverRadius = 20;
       this.hoveredTowerUid = null;
       for (const tower of this.store.towers) {
@@ -310,6 +341,7 @@ export class GameScene extends Phaser.Scene {
       this.splashRings.clear();
       this.towerViews.clear();
       this.enemyViews.clear();
+      this.buildGhost.destroy();
     });
 
     // ── 9. Launch UIScene ─────────────────────────────────────────────────────
@@ -402,6 +434,43 @@ export class GameScene extends Phaser.Scene {
     if (this.store.gameState === 'victory') {
       this.showOverlay('VICTORY!', 0x22c55e);
     }
+  }
+
+  /**
+   * Preview the tower that would be built under the cursor.
+   *
+   * Hidden while the pointer is over an existing tower, because that already
+   * shows its own range and the click there selects rather than builds.
+   */
+  private drawBuildGhost(): void {
+    if (!this.pointerWorld || this.isPaused || this.hoveredTowerUid) {
+      this.buildGhost.hide();
+      return;
+    }
+
+    const grid = worldToGrid(this.pointerWorld.x, this.pointerWorld.y);
+    if (!grid) {
+      this.buildGhost.hide();
+      return;
+    }
+
+    const rejection = validatePlacement(
+      this.map,
+      this.store.towers,
+      this.store.gold,
+      this.store.gameState,
+      grid.x,
+      grid.y,
+      this.selectedArchetype,
+    );
+
+    const rect = tileRect(grid.x, grid.y);
+    this.buildGhost.show(
+      rect.x + rect.w / 2,
+      rect.y + rect.h / 2,
+      this.selectedArchetype,
+      rejection,
+    );
   }
 
   // ── Tower views ────────────────────────────────────────────────────────────
@@ -512,6 +581,7 @@ export class GameScene extends Phaser.Scene {
         shot.tower.worldX, shot.tower.worldY,
         { uid: shot.target.uid, x: shot.target.x, y: shot.target.y },
         shot.tower.definition.color,
+        shot.tower.archetype,
       );
     }
 
@@ -568,6 +638,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    this.drawBuildGhost();
+
     // Towers draw themselves — this only steers them.
     this.syncTowerViews();
 
@@ -587,12 +659,39 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Draw projectiles
+    // Draw projectiles: a head, plus a trail of puffs tapering out behind it.
+    // The trail is derived from the flight line rather than from remembered
+    // positions, so it costs no per-projectile history.
     for (const proj of this.projectileSystem.getAlive()) {
-      const px = proj.startX + (proj.targetX - proj.startX) * proj.progress;
-      const py = proj.startY + (proj.targetY - proj.startY) * proj.progress;
+      const dx = proj.targetX - proj.startX;
+      const dy = proj.targetY - proj.startY;
+      const px = proj.startX + dx * proj.progress;
+      const py = proj.startY + dy * proj.progress;
+
+      const distance = Math.hypot(dx, dy);
+      const style = projectileStyleFor(proj.archetype);
+
+      if (distance > 0) {
+        // Unit vector pointing back down the flight path.
+        const backX = -dx / distance;
+        const backY = -dy / distance;
+        // Never draw trail behind the muzzle it came from.
+        const travelled = distance * proj.progress;
+
+        for (let i = 0; i < style.trailSegments; i++) {
+          const puff = trailPuff(i, style);
+          if (puff.distance > travelled) break;
+          this.projectileGraphics.fillStyle(proj.color, puff.alpha);
+          this.projectileGraphics.fillCircle(
+            px + backX * puff.distance,
+            py + backY * puff.distance,
+            puff.radius,
+          );
+        }
+      }
+
       this.projectileGraphics.fillStyle(proj.color, 1);
-      this.projectileGraphics.fillCircle(px, py, 3);
+      this.projectileGraphics.fillCircle(px, py, style.headRadius);
     }
 
     // Enemies draw themselves, health bars included — this only walks them.

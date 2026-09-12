@@ -5,8 +5,9 @@ import type { TowerState } from '../../types/tower';
 import {
   TEXTURE_KEYS,
   towerBaseTextureKey,
+  towerBarrelTextureKey,
   baseScaleFor,
-  BARREL_TIP_DISTANCE,
+  barrelTipDistance,
 } from './textures';
 import {
   MOTION,
@@ -51,6 +52,8 @@ export class TowerView {
   private readonly flash: Phaser.GameObjects.Image;
   private readonly pips: Phaser.GameObjects.Graphics;
   private readonly motion: MotionProfile;
+  /** Distance from the tower centre to this archetype's muzzle. */
+  private readonly tipDistance: number;
 
   /** Current barrel angle in radians; eased toward the target each frame. */
   private facing = -Math.PI / 2;
@@ -64,6 +67,7 @@ export class TowerView {
     this.uid = tower.uid;
     this.scene = scene;
     this.motion = MOTION[tower.archetype];
+    this.tipDistance = barrelTipDistance(tower.archetype);
 
     const radius = tower.definition.radius;
 
@@ -76,7 +80,7 @@ export class TowerView {
       .setVisible(false);
 
     this.barrel = scene.add
-      .image(0, 0, TEXTURE_KEYS.towerBarrel)
+      .image(0, 0, towerBarrelTextureKey(tower.archetype))
       // Pivot at the inner end, so the barrel swings around the tower centre.
       .setOrigin(0.1, 0.5)
       .setTint(color)
@@ -207,7 +211,7 @@ export class TowerView {
 
     if (this.motionState.flashLife > 0) {
       // The muzzle travels with the recoil, so the flash has to follow it.
-      const tip = BARREL_TIP_DISTANCE - kick;
+      const tip = this.tipDistance - kick;
       const life = this.motionState.flashLife / FLASH_DURATION;
       this.flash
         .setPosition(cos * tip, sin * tip + bob)

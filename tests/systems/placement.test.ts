@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import type { MapDefinition } from '../../src/data/mapDefinitions';
 import type { TowerState } from '../../src/types/tower';
-import { PlacementSystem } from '../../src/systems/placement/PlacementSystem';
+import { PlacementSystem, validatePlacement } from '../../src/systems/placement/PlacementSystem';
 import { GameStateStore } from '../../src/systems/game-state/GameStateStore';
 import { BALANCE } from '../../src/data/balance';
 
@@ -347,3 +347,73 @@ function makeTower(uid: string, gridX: number, gridY: number): TowerState {
     definition,
   };
 }
+
+// ── The build preview's guarantee ────────────────────────────────────────────
+
+describe('validatePlacement agrees with attempt', () => {
+  /**
+   * The build ghost colours a tile from validatePlacement, and the click that
+   * follows runs attempt. If those two ever disagree, the preview lies: the
+   * player is shown green and refused, or shown red on a tile they could have
+   * built on. This sweeps the whole board in every state, gold level and
+   * archetype and holds them to the same answer.
+   */
+  it('returns exactly the reason attempt would, across the whole board', () => {
+    const states = ['idle', 'wave_cleared', 'wave_active', 'placing', 'game_over', 'victory'] as const;
+    const archetypes = ['basic', 'fast', 'heavy'] as const;
+    const golds = [0, 80, 120, 500];
+    const occupied = new PlacementSystem().attempt(
+      MOCK_MAP, NO_TOWERS, 500, 'idle', 4, 4, 'basic',
+    ).tower!;
+
+    let compared = 0;
+    for (const state of states) {
+      for (const archetype of archetypes) {
+        for (const gold of golds) {
+          for (let x = 0; x < 6; x++) {
+            for (let y = 0; y < 6; y++) {
+              // A fresh system each time: attempt mints a uid on success, so a
+              // shared one would drift while validatePlacement stays pure.
+              const result = new PlacementSystem().attempt(
+                MOCK_MAP, [occupied], gold, state, x, y, archetype,
+              );
+              const rejection = validatePlacement(
+                MOCK_MAP, [occupied], gold, state, x, y, archetype,
+              );
+
+              expect(rejection, `${state}/${archetype}/${gold}g @${x},${y}`)
+                .toBe(result.success ? null : result.reason);
+              compared++;
+            }
+          }
+        }
+      }
+    }
+
+    // Guard against the loops silently collapsing to nothing.
+    expect(compared).toBe(states.length * archetypes.length * golds.length * 36);
+  });
+
+  it('builds nothing and mints no uid when only previewing', () => {
+    const ps = new PlacementSystem();
+
+    // A thousand previews must not consume tower ids or change any state.
+    for (let i = 0; i < 1000; i++) {
+      validatePlacement(MOCK_MAP, NO_TOWERS, 500, 'idle', 2, 2, 'basic');
+    }
+
+    expect(ps.attempt(MOCK_MAP, NO_TOWERS, 500, 'idle', 2, 2, 'basic').tower!.uid)
+      .toBe('tower_0');
+  });
+
+  it('reports the same precedence of reasons that attempt does', () => {
+    // A path tile the player also cannot afford is refused for being a path,
+    // in both paths through the code.
+    const gold = 0;
+    const rejection = validatePlacement(MOCK_MAP, NO_TOWERS, gold, 'idle', 3, 0, 'basic');
+    const result = new PlacementSystem().attempt(MOCK_MAP, NO_TOWERS, gold, 'idle', 3, 0, 'basic');
+
+    expect(rejection).toBe('not_buildable');
+    expect(result.reason).toBe('not_buildable');
+  });
+});

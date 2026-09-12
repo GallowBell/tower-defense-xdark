@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 
+import { BALANCE } from '../../data/balance';
 import type { EnemyArchetype } from '../../types/enemy';
 import type { TowerArchetype } from '../../types/tower';
 
@@ -24,7 +25,11 @@ export const TEXTURE_KEYS = {
     fast: `${PREFIX}-tower-fast`,
     heavy: `${PREFIX}-tower-heavy`,
   },
-  towerBarrel: `${PREFIX}-tower-barrel`,
+  towerBarrel: {
+    basic: `${PREFIX}-barrel-basic`,
+    fast: `${PREFIX}-barrel-fast`,
+    heavy: `${PREFIX}-barrel-heavy`,
+  },
   muzzleFlash: `${PREFIX}-muzzle-flash`,
   splashRing: `${PREFIX}-splash-ring`,
   enemyBody: {
@@ -34,7 +39,27 @@ export const TEXTURE_KEYS = {
   },
   enemyArmor: `${PREFIX}-enemy-armor`,
   pixel: `${PREFIX}-pixel`,
+  tileBuild: `${PREFIX}-tile-build`,
 } as const;
+
+/**
+ * Path tiles come in variants so a long straight run does not read as one
+ * repeated stamp. Picked deterministically from grid position, so a restart
+ * lays down exactly the same road.
+ */
+export const PATH_TILE_VARIANTS = 3;
+
+export function pathTileTextureKey(variant: number): string {
+  return `${PREFIX}-tile-path-${variant}`;
+}
+
+/** Which path variant a tile uses. Deterministic, and not a visible grid. */
+export function pathVariantAt(gridX: number, gridY: number): number {
+  // Both coefficients must be coprime with the variant count, or that axis
+  // collapses: with 3 variants a `y * 3` term is always 0, which made every
+  // vertical stretch of road one repeated stamp.
+  return (gridX + gridY * 2) % PATH_TILE_VARIANTS;
+}
 
 /** Texture key for an enemy archetype's body. */
 export function enemyBodyTextureKey(archetype: EnemyArchetype): string {
@@ -46,6 +71,11 @@ export function towerBaseTextureKey(archetype: TowerArchetype): string {
   return TEXTURE_KEYS.towerBase[archetype];
 }
 
+/** Texture key for an archetype's barrel. */
+export function towerBarrelTextureKey(archetype: TowerArchetype): string {
+  return TEXTURE_KEYS.towerBarrel[archetype];
+}
+
 /**
  * Size each base is drawn at. Bases are generated large and scaled down per
  * tower, so a level-4 Cannon stays crisp.
@@ -53,18 +83,40 @@ export function towerBaseTextureKey(archetype: TowerArchetype): string {
 const BASE_SIZE = 64;
 const BASE_RADIUS = 28;
 
-/** Barrel dimensions: long enough to read as a direction at a glance. */
-const BARREL_W = 34;
-const BARREL_H = 12;
+/**
+ * Barrel dimensions per archetype.
+ *
+ * One shared barrel meant all three towers had the same outline from the base
+ * outward, so they were told apart only by the shape at the very centre. A
+ * silhouette should be readable at a glance: the Gunner gets a long twin
+ * autocannon, the Cannon a stubby mortar with a heavy muzzle, the Archer
+ * something slim in between.
+ */
+interface BarrelSpec {
+  width: number;
+  height: number;
+}
+
+const BARRELS: Record<TowerArchetype, BarrelSpec> = {
+  basic: { width: 32, height: 10 },
+  fast: { width: 38, height: 12 },
+  heavy: { width: 26, height: 18 },
+};
+
+/** Fraction of the barrel that sticks out past the pivot, matching its origin. */
+const BARREL_PIVOT = 0.1;
 
 /**
- * Distance from the tower centre to the muzzle, in barrel-local pixels.
+ * Distance from the tower centre to the muzzle, in pixels.
  *
  * The barrel pivots at origin 0.1, so 90% of its length sticks out past the
  * centre. Anything that wants to sit at the firing end — the muzzle flash —
- * needs this rather than its own guess.
+ * needs this rather than its own guess, and it differs per archetype now that
+ * the barrels do.
  */
-export const BARREL_TIP_DISTANCE = BARREL_W * 0.9;
+export function barrelTipDistance(archetype: TowerArchetype): number {
+  return BARRELS[archetype].width * (1 - BARREL_PIVOT);
+}
 
 /** Muzzle flash bounds. Drawn pointing +x so it shares the barrel's rotation. */
 const FLASH_W = 30;
@@ -89,6 +141,12 @@ const ENEMY_RADIUS = 24;
 const PIXEL_SIZE = 4;
 
 /**
+ * Tiles are generated at their real on-screen size — they are never scaled, so
+ * there is nothing to gain from oversampling them.
+ */
+const TILE_SIZE = BALANCE.tileSize;
+
+/**
  * Create every texture this module owns, once per game.
  *
  * Safe to call repeatedly — Phaser keeps textures in a global manager that
@@ -98,7 +156,9 @@ export function ensureTextures(scene: Phaser.Scene): void {
   ensureTowerBase(scene, 'basic', drawDiamond);
   ensureTowerBase(scene, 'fast', drawTriangle);
   ensureTowerBase(scene, 'heavy', drawPentagon);
-  ensureBarrel(scene);
+  ensureBarrel(scene, 'basic');
+  ensureBarrel(scene, 'fast');
+  ensureBarrel(scene, 'heavy');
   ensureMuzzleFlash(scene);
   ensureSplashRing(scene);
   ensureEnemyBody(scene, 'basic', drawGrunt);
@@ -106,6 +166,62 @@ export function ensureTextures(scene: Phaser.Scene): void {
   ensureEnemyBody(scene, 'tank', drawBrute);
   ensureEnemyArmor(scene);
   ensurePixel(scene);
+  ensureTiles(scene);
+}
+
+/**
+ * Ground tiles.
+ *
+ * Both were flat rectangles of one colour, which made the board read as paper.
+ * These stay white-and-tinted like everything else here, so the palette still
+ * comes from GAME_COLORS: depth is built out of *alpha* instead of shade, which
+ * over a dark battlefield darkens toward the background and brightens toward
+ * the tint.
+ */
+function ensureTiles(scene: Phaser.Scene): void {
+  for (let variant = 0; variant < PATH_TILE_VARIANTS; variant++) {
+    const key = pathTileTextureKey(variant);
+    if (scene.textures.exists(key)) continue;
+
+    const g = scene.make.graphics({ x: 0, y: 0 }, false);
+
+    // Road bed, then a darker rim so neighbouring tiles show a seam rather
+    // than fusing into one orange slab.
+    g.fillStyle(0xffffff, 0.7);
+    g.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+    g.fillStyle(0xffffff, 0.86);
+    g.fillRect(2, 2, TILE_SIZE - 4, TILE_SIZE - 4);
+
+    // Grit. Fixed per variant rather than random, so the road is identical
+    // across restarts and across the three maps.
+    const gritByVariant: [number, number, number][][] = [
+      [[11, 14, 3], [31, 9, 2], [22, 33, 2.5], [39, 28, 2]],
+      [[8, 30, 2.5], [19, 12, 2], [35, 37, 3], [28, 20, 2]],
+      [[14, 24, 2], [33, 16, 2.5], [24, 40, 2], [40, 34, 2.5]],
+    ];
+    const grit = gritByVariant[variant];
+    for (const [gx, gy, r] of grit) {
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(gx, gy, r);
+    }
+
+    g.generateTexture(key, TILE_SIZE, TILE_SIZE);
+    g.destroy();
+  }
+
+  if (!scene.textures.exists(TEXTURE_KEYS.tileBuild)) {
+    const g = scene.make.graphics({ x: 0, y: 0 }, false);
+
+    // A faint cell with a brighter inset edge: buildable ground should read as
+    // a grid you can drop something onto, not as undifferentiated blue.
+    g.fillStyle(0xffffff, 0.26);
+    g.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+    g.lineStyle(1, 0xffffff, 0.5);
+    g.strokeRect(1.5, 1.5, TILE_SIZE - 3, TILE_SIZE - 3);
+
+    g.generateTexture(TEXTURE_KEYS.tileBuild, TILE_SIZE, TILE_SIZE);
+    g.destroy();
+  }
 }
 
 type ShapeDrawer = (g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number) => void;
@@ -130,16 +246,35 @@ function ensureTowerBase(scene: Phaser.Scene, archetype: TowerArchetype, draw: S
   g.destroy();
 }
 
-function ensureBarrel(scene: Phaser.Scene): void {
-  if (scene.textures.exists(TEXTURE_KEYS.towerBarrel)) return;
+function ensureBarrel(scene: Phaser.Scene, archetype: TowerArchetype): void {
+  const key = towerBarrelTextureKey(archetype);
+  if (scene.textures.exists(key)) return;
 
+  const { width, height } = BARRELS[archetype];
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
   g.fillStyle(0xffffff, 1);
-  g.fillRect(0, (BARREL_H - 6) / 2, BARREL_W - 6, 6);
-  // Flared muzzle, so the firing end is obvious once the barrel rotates.
-  g.fillRect(BARREL_W - 8, 0, 8, BARREL_H);
 
-  g.generateTexture(TEXTURE_KEYS.towerBarrel, BARREL_W, BARREL_H);
+  if (archetype === 'fast') {
+    // Twin autocannon: two thin shafts, so its length reads as rate of fire
+    // rather than as weight.
+    const shaft = 3;
+    const gap = 3;
+    const top = height / 2 - gap / 2 - shaft;
+    g.fillRect(0, top, width - 5, shaft);
+    g.fillRect(0, height / 2 + gap / 2, width - 5, shaft);
+    g.fillRect(width - 6, height / 2 - shaft, 6, shaft * 2);
+  } else if (archetype === 'heavy') {
+    // Mortar: short, thick, and mostly muzzle.
+    const shaft = 10;
+    g.fillRect(0, (height - shaft) / 2, width - 9, shaft);
+    g.fillRect(width - 11, 0, 11, height);
+  } else {
+    const shaft = 5;
+    g.fillRect(0, (height - shaft) / 2, width - 6, shaft);
+    g.fillRect(width - 7, 1, 7, height - 2);
+  }
+
+  g.generateTexture(key, width, height);
   g.destroy();
 }
 
