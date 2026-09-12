@@ -3,16 +3,13 @@
  * Makes the game progressively harder and rewards scale accordingly.
  */
 
+/**
+ * Run-shape constants — starting gold, starting lives, total waves — live in
+ * BALANCE, not here. They were declared in both, with the same values and no
+ * reader for this copy, so editing them here changed nothing while looking
+ * like it should.
+ */
 export const DIFFICULTY = {
-  /** Starting gold for a new game */
-  startingGold: 200,
-
-  /** Starting lives */
-  startingLives: 20,
-
-  /** Total waves */
-  totalWaves: 8,
-
   /**
    * Enemy HP multiplier by wave (1-based).
    * +15% per wave: wave 1 = 1.00x, wave 4 = 1.45x, wave 8 = 2.05x
@@ -26,7 +23,7 @@ export const DIFFICULTY = {
    * +10% per wave: wave 1 = 1.00x, wave 4 = 1.30x, wave 8 = 1.70x
    */
   rewardScale(wave: number): number {
-    return 1 + (wave - 1) * 0.10;
+    return 1 + (wave - 1) * 0.1;
   },
 
   /**
@@ -54,6 +51,6 @@ export const DIFFICULTY = {
    * real choice, not the only move.
    */
   upgradeDamagePerLevel: 0.35,
-  upgradeFireRatePerLevel: 0.20,
+  upgradeFireRatePerLevel: 0.2,
   upgradeRangePerLevel: 0.08,
 } as const;
