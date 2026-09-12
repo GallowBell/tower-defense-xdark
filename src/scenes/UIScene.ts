@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { GAME_COLORS, SCENE_KEYS } from '../app/constants';
 import { GameStateStore } from '../systems/game-state/GameStateStore';
 import type { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
+import { TARGETING_LABELS } from '../systems/combat/TargetingSystem';
 import { WAVE_DEFINITIONS } from '../systems/waves/waveDefinitions';
 import { describeWave } from '../systems/waves/waveSummary';
 
@@ -181,12 +182,16 @@ export class UIScene extends Phaser.Scene {
 
         const panelX = 16;
         const panelY = 80;
+        // Targeting is shown on both panels: it is the one thing a maxed
+        // tower can still change.
+        const targeting = `Target [T]: ${TARGETING_LABELS[selectedTower.targetingMode]}`;
         const infoLines = atMax
           ? [
               `${def.displayName} Lv.${selectedTower.level} — MAX`,
               `DMG: ${def.damage}`,
               `RNG: ${def.range}`,
               `SPD: ${def.fireRate.toFixed(1)}`,
+              targeting,
               `Sell value: ${Math.floor(selectedTower.investedGold * 0.5)}g`,
             ]
           : [
@@ -194,6 +199,7 @@ export class UIScene extends Phaser.Scene {
               `DMG: ${def.damage} → ${proj.nextDamage}`,
               `RNG: ${def.range} → ${proj.nextRange}`,
               `SPD: ${def.fireRate.toFixed(1)} → ${proj.nextFireRate.toFixed(1)}`,
+              targeting,
               `Upgrade [U]: ${proj.cost}g`,
             ];
 

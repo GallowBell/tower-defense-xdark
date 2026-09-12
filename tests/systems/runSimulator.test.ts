@@ -308,3 +308,148 @@ describe('RunSimulator', () => {
     expect(play()).toEqual(play());
   });
 });
+
+// ── Targeting modes ──────────────────────────────────────────────────────────
+
+describe('targeting modes, through a real run', () => {
+  beforeEach(() => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.99); // never crit
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** A wave of Grunts spaced out enough that several are in range at once. */
+  const PACK: WaveDefinition[] = [
+    {
+      index: 0,
+      entries: [{ archetype: 'basic', count: 5, interval: 0.4 }],
+      goldBonus: 20,
+    },
+  ];
+
+  it('defaults a new tower to first', () => {
+    const sim = new RunSimulator(MAP, {}, PACK);
+    const placed = sim.placeTower(9, 3, 'basic');
+
+    expect(placed.tower!.targetingMode).toBe('first');
+  });
+
+  it('cycles a tower through every mode and back', () => {
+    const sim = new RunSimulator(MAP, {}, PACK);
+    const uid = sim.placeTower(9, 3, 'basic').tower!.uid;
+
+    expect(sim.cycleTargetingMode(uid)).toBe('last');
+    expect(sim.cycleTargetingMode(uid)).toBe('closest');
+    expect(sim.cycleTargetingMode(uid)).toBe('strongest');
+    expect(sim.cycleTargetingMode(uid)).toBe('first');
+  });
+
+  it('reports nothing for a tower that does not exist', () => {
+    const sim = new RunSimulator(MAP, {}, PACK);
+
+    expect(sim.cycleTargetingMode('tower_nope')).toBeNull();
+    expect(sim.setTargetingMode('tower_nope', 'last')).toBe(false);
+  });
+
+  it('costs nothing and works mid-wave', () => {
+    // Retargeting is a standing order, not a purchase — a player answering a
+    // wave they did not expect should not have to pay for it.
+    const sim = new RunSimulator(MAP, {}, PACK);
+    const uid = sim.placeTower(9, 3, 'basic').tower!.uid;
+    sim.startNextWave();
+    run(sim, 2);
+
+    const goldBefore = sim.store.gold;
+    expect(sim.cycleTargetingMode(uid)).toBe('last');
+    expect(sim.store.gold).toBe(goldBefore);
+    expect(sim.store.gameState).toBe('wave_active');
+  });
+
+  it('changes which enemy of a pack gets shot', () => {
+    // The decisive one: the mode has to reach all the way through combat, not
+    // just sit on the tower. `first` leads the pack, `last` trails it, so the
+    // two hit different enemies out of the same spawn order.
+    const firstShots: string[] = [];
+    const lastShots: string[] = [];
+
+    for (const [mode, log] of [
+      ['first', firstShots],
+      ['last', lastShots],
+    ] as const) {
+      const sim = new RunSimulator(
+        MAP,
+        { onShot: (shot) => log.push(shot.target.uid) },
+        PACK,
+      );
+      const uid = sim.placeTower(9, 3, 'basic').tower!.uid;
+      sim.setTargetingMode(uid, mode);
+      sim.startNextWave();
+      run(sim, 6);
+    }
+
+    expect(firstShots.length).toBeGreaterThan(0);
+    expect(lastShots.length).toBeGreaterThan(0);
+    expect(firstShots).not.toEqual(lastShots);
+  });
+
+  it('keeps a mode across an upgrade', () => {
+    const sim = new RunSimulator(MAP, {}, PACK);
+    const uid = sim.placeTower(9, 3, 'basic').tower!.uid;
+    sim.setTargetingMode(uid, 'strongest');
+
+    expect(sim.upgradeTower(uid)).toBeGreaterThan(0);
+    expect(sim.store.towers.find((t) => t.uid === uid)!.targetingMode).toBe(
+      'strongest',
+    );
+  });
+
+  it('keeps the tower firing in every mode', () => {
+    // A mode that quietly stopped a tower shooting would be a regression no
+    // targeting unit test would catch. Note this asserts shots, not kills:
+    // see the spread-versus-focus test below for why those differ.
+    for (const mode of ['first', 'last', 'closest', 'strongest'] as const) {
+      let shots = 0;
+      const sim = new RunSimulator(MAP, { onShot: () => shots++ }, PACK);
+      const uid = sim.placeTower(9, 3, 'basic').tower!.uid;
+      sim.setTargetingMode(uid, mode);
+      sim.startNextWave();
+      run(sim, 8);
+
+      expect(sim.store.towers[0].targetingMode, mode).toBe(mode);
+      expect(shots, mode).toBeGreaterThan(0);
+    }
+  });
+
+  it('spreads damage on last and concentrates it on first', () => {
+    // The real trade-off, and the reason to ever pick one over the other.
+    // `last` re-aims at each new arrival, so the same number of shots lands
+    // across more enemies and finishes fewer of them. This is a property of
+    // the mode, not a bug: the whole point of `last` is softening a wave.
+    function survey(mode: 'first' | 'last') {
+      let shots = 0;
+      const sim = new RunSimulator(MAP, { onShot: () => shots++ }, PACK);
+      const uid = sim.placeTower(9, 3, 'basic').tower!.uid;
+      sim.setTargetingMode(uid, mode);
+      sim.startNextWave();
+      run(sim, 12);
+
+      return {
+        shots,
+        kills: sim.enemies.filter((e) => e.dead).length,
+        // Damaged but still walking — the signature of spread damage.
+        wounded: sim.enemies.filter((e) => !e.dead && e.hp < e.maxHp).length,
+      };
+    }
+
+    const first = survey('first');
+    const last = survey('last');
+
+    // Same tower, same wave, same ammunition — only the aim differs.
+    expect(last.shots).toBe(first.shots);
+    // The same shots, thinner: more enemies hurt, fewer actually finished.
+    expect(last.wounded).toBeGreaterThan(first.wounded);
+    expect(first.kills).toBeGreaterThan(last.kills);
+  });
+});

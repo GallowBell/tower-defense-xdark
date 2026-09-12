@@ -34,6 +34,7 @@ function makeTower(overrides?: Partial<TowerState>): TowerState {
     worldY: 100,
     cooldown: 0,
     targetUid: null,
+    targetingMode: 'first',
     level: 1,
     investedGold: 100,
     baseDefinition: definition,

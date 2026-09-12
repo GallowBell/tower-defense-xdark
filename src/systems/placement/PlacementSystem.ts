@@ -96,6 +96,7 @@ export class PlacementSystem {
       worldY: pos.y,
       cooldown: 0,
       targetUid: null,
+      targetingMode: 'first',
       level: 1,
       investedGold: def.cost,
       baseDefinition: def,
