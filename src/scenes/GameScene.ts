@@ -11,6 +11,7 @@ import type { TowerArchetype } from '../types/tower';
 import { worldToGrid, tileRect, getTileType } from '../utils/grid';
 import { TowerView } from '../systems/render/TowerView';
 import {
+  SUPERSAMPLED_SCALE,
   TEXTURE_KEYS,
   pathTileTextureKey,
   pathVariantAt,
@@ -29,6 +30,9 @@ import { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { SkinManager } from '../systems/skins/SkinManager';
 import { SoundManager } from '../systems/audio/SoundManager';
 import { ParticleManager } from '../systems/effects/ParticleManager';
+import { APP_DIMENSIONS } from '../app/constants';
+import { applyCameraScale } from '../app/applyRenderScale';
+import { RENDER_SCALE } from '../app/renderScale';
 
 export class GameScene extends Phaser.Scene {
   /**
@@ -121,6 +125,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // The canvas is rendered at RENDER_SCALE; this puts the camera back
+
+    // into the fixed 1280x720 world every scene is laid out for.
+
+    applyCameraScale(this, RENDER_SCALE);
+
     // ── 0. Reset per-run state ────────────────────────────────────────────────
     // Phaser reuses this Scene instance across scene.restart(), so field
     // initialisers do NOT re-run. Anything mutable must be reset by hand or it
@@ -200,11 +210,13 @@ export class GameScene extends Phaser.Scene {
         if (tileType === 'path') {
           this.add
             .image(cx, cy, pathTileTextureKey(pathVariantAt(col, row)))
+            .setScale(SUPERSAMPLED_SCALE)
             .setTint(GAME_COLORS.path)
             .setDepth(RENDER_DEPTH.tiles);
         } else if (tileType === 'buildable') {
           this.add
             .image(cx, cy, TEXTURE_KEYS.tileBuild)
+            .setScale(SUPERSAMPLED_SCALE)
             .setTint(GAME_COLORS.buildZone)
             .setDepth(RENDER_DEPTH.tiles);
         }
@@ -356,7 +368,7 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-P', () => this.togglePause());
 
     // ── 8. Pause overlay (hidden initially) ──────────────────────────────────
-    const { width, height } = this.cameras.main;
+    const { width, height } = APP_DIMENSIONS;
     const pauseBg = this.add
       .rectangle(width / 2, height / 2, width, height, 0x000000, 0.45)
       .setDepth(1000)
@@ -823,7 +835,7 @@ export class GameScene extends Phaser.Scene {
       this.soundManager.playVictory();
     }
 
-    const { width, height } = this.cameras.main;
+    const { width, height } = APP_DIMENSIONS;
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6);
     this.add
       .text(width / 2, height * 0.42, text, {

@@ -6,6 +6,9 @@ import type { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { TARGETING_LABELS } from '../systems/combat/TargetingSystem';
 import { WAVE_DEFINITIONS } from '../systems/waves/waveDefinitions';
 import { describeWave } from '../systems/waves/waveSummary';
+import { APP_DIMENSIONS } from '../app/constants';
+import { applyCameraScale } from '../app/applyRenderScale';
+import { RENDER_SCALE } from '../app/renderScale';
 
 export class UIScene extends Phaser.Scene {
   private goldText!: Phaser.GameObjects.Text;
@@ -27,6 +30,12 @@ export class UIScene extends Phaser.Scene {
   }
 
   create(): void {
+    // The canvas is rendered at RENDER_SCALE; this puts the camera back
+
+    // into the fixed 1280x720 world every scene is laid out for.
+
+    applyCameraScale(this, RENDER_SCALE);
+
     const store = this.registry.get('store') as GameStateStore | null;
     if (!store) return;
 
@@ -41,9 +50,9 @@ export class UIScene extends Phaser.Scene {
       GAME_COLORS.panel,
     ).color;
     this.add.rectangle(
-      this.cameras.main.width / 2,
+      APP_DIMENSIONS.width / 2,
       24,
-      this.cameras.main.width,
+      APP_DIMENSIONS.width,
       48,
       panelColor,
       0.9,
@@ -101,7 +110,7 @@ export class UIScene extends Phaser.Scene {
     // Right-aligned under the top bar, so it never collides with the upgrade
     // panel on the left. Composition comes straight from the wave data.
     this.wavePreviewText = this.add
-      .text(this.cameras.main.width - 16, 60, '', {
+      .text(APP_DIMENSIONS.width - 16, 60, '', {
         color: '#e2e8f0',
         fontFamily: 'Arial, sans-serif',
         fontSize: '14px',

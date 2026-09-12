@@ -1,5 +1,6 @@
 import { createGame } from './app/game';
 import { GAME_PARENT_ID } from './app/config';
+import { installCrispText } from './app/crispText';
 
 const ensureGameRoot = (): HTMLElement => {
   const existingRoot = document.getElementById(GAME_PARENT_ID);
@@ -16,4 +17,6 @@ const ensureGameRoot = (): HTMLElement => {
 };
 
 ensureGameRoot();
+// Must run before the game is built: scenes create text during boot.
+installCrispText();
 createGame();

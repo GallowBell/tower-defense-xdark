@@ -47,6 +47,39 @@ tower still fired at most once per call.
 Get this wrong and the symptom is subtle: the board keeps animating while
 paused, or effects run at 1x while the game runs at 2x.
 
+### Resolution
+
+The world is a fixed 1280x720 that Phaser's FIT mode stretches to the screen.
+Stretching adds no pixels, so the canvas is built at `RENDER_SCALE` times the
+world instead (`src/app/renderScale.ts`), and **every scene zooms its camera by
+the same factor** in `create()`:
+
+```ts
+applyCameraScale(this, RENDER_SCALE);
+```
+
+A new scene that forgets this renders into a canvas two or three times the size
+it is laid out for, and everything lands in the top-left corner. For the same
+reason, never read `this.cameras.main.width` for layout — under a zoomed camera
+that is the canvas width in render pixels, not the 1280 the layout means. Use
+`APP_DIMENSIONS`.
+
+Phaser gives no help here: `resolution` was removed in 3.24 and never replaced,
+and `ScaleManager.zoom` is ignored entirely under FIT. Two things do not follow
+the camera and need their own handling:
+
+- **Text** rasterises glyphs at `style.resolution`, which defaults to 1. The
+  `text` factory is overridden once in `src/app/crispText.ts` so every Text gets
+  the right one. Note `GameObjectFactory.register` silently refuses to overwrite
+  an existing factory — `remove` has to come first.
+- **Textures drawn at 1:1** (tiles, barrels) are generated at
+  `TEXTURE_SUPERSAMPLE` and drawn at `SUPERSAMPLED_SCALE`. Tower bases and enemy
+  bodies are already generated much larger than they are drawn and need nothing.
+
+`e2e/smoke.spec.ts` has a 2560x1440 spec guarding all of it; the rest of the
+suite runs at 1280x720 where the scale is exactly 1 and none of this is
+exercised.
+
 ### Rendering
 
 Towers and enemies are `Container`-based views (`TowerView`, `EnemyView`), one

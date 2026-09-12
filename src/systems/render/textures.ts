@@ -140,11 +140,25 @@ const ENEMY_RADIUS = 24;
 /** A plain white block, stretched into health bars. */
 const PIXEL_SIZE = 4;
 
-/**
- * Tiles are generated at their real on-screen size — they are never scaled, so
- * there is nothing to gain from oversampling them.
- */
 const TILE_SIZE = BALANCE.tileSize;
+
+/**
+ * How many texture pixels to generate per world pixel, for art that is drawn
+ * at 1:1 and so has no headroom of its own.
+ *
+ * Tower bases and enemy bodies are already generated far larger than they are
+ * drawn and stay sharp for free. Tiles and barrels were generated at exactly
+ * their on-screen size, which was fine while the canvas was 1280x720 and
+ * blurred the moment it stopped being — and tiles cover the entire board, so
+ * they are the most visible thing on screen to get wrong.
+ *
+ * Matches MAX_RENDER_SCALE: sharp on the densest screen the game will render
+ * for, and the cost is a handful of small textures.
+ */
+export const TEXTURE_SUPERSAMPLE = 3;
+
+/** Draw scale that renders a supersampled texture at its true world size. */
+export const SUPERSAMPLED_SCALE = 1 / TEXTURE_SUPERSAMPLE;
 
 /**
  * Create every texture this module owns, once per game.
@@ -179,6 +193,10 @@ export function ensureTextures(scene: Phaser.Scene): void {
  * the tint.
  */
 function ensureTiles(scene: Phaser.Scene): void {
+  // Every coordinate below is in world pixels, multiplied up as it is drawn.
+  const S = TEXTURE_SUPERSAMPLE;
+  const size = TILE_SIZE * S;
+
   for (let variant = 0; variant < PATH_TILE_VARIANTS; variant++) {
     const key = pathTileTextureKey(variant);
     if (scene.textures.exists(key)) continue;
@@ -188,9 +206,9 @@ function ensureTiles(scene: Phaser.Scene): void {
     // Road bed, then a darker rim so neighbouring tiles show a seam rather
     // than fusing into one orange slab.
     g.fillStyle(0xffffff, 0.7);
-    g.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+    g.fillRect(0, 0, size, size);
     g.fillStyle(0xffffff, 0.86);
-    g.fillRect(2, 2, TILE_SIZE - 4, TILE_SIZE - 4);
+    g.fillRect(2 * S, 2 * S, size - 4 * S, size - 4 * S);
 
     // Grit. Fixed per variant rather than random, so the road is identical
     // across restarts and across the three maps.
@@ -217,10 +235,10 @@ function ensureTiles(scene: Phaser.Scene): void {
     const grit = gritByVariant[variant];
     for (const [gx, gy, r] of grit) {
       g.fillStyle(0xffffff, 1);
-      g.fillCircle(gx, gy, r);
+      g.fillCircle(gx * S, gy * S, r * S);
     }
 
-    g.generateTexture(key, TILE_SIZE, TILE_SIZE);
+    g.generateTexture(key, size, size);
     g.destroy();
   }
 
@@ -230,11 +248,11 @@ function ensureTiles(scene: Phaser.Scene): void {
     // A faint cell with a brighter inset edge: buildable ground should read as
     // a grid you can drop something onto, not as undifferentiated blue.
     g.fillStyle(0xffffff, 0.26);
-    g.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-    g.lineStyle(1, 0xffffff, 0.5);
-    g.strokeRect(1.5, 1.5, TILE_SIZE - 3, TILE_SIZE - 3);
+    g.fillRect(0, 0, size, size);
+    g.lineStyle(1 * S, 0xffffff, 0.5);
+    g.strokeRect(1.5 * S, 1.5 * S, size - 3 * S, size - 3 * S);
 
-    g.generateTexture(TEXTURE_KEYS.tileBuild, TILE_SIZE, TILE_SIZE);
+    g.generateTexture(TEXTURE_KEYS.tileBuild, size, size);
     g.destroy();
   }
 }
@@ -274,28 +292,30 @@ function ensureBarrel(scene: Phaser.Scene, archetype: TowerArchetype): void {
   const key = towerBarrelTextureKey(archetype);
   if (scene.textures.exists(key)) return;
 
-  const { width, height } = BARRELS[archetype];
+  const S = TEXTURE_SUPERSAMPLE;
+  const width = BARRELS[archetype].width * S;
+  const height = BARRELS[archetype].height * S;
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
   g.fillStyle(0xffffff, 1);
 
   if (archetype === 'fast') {
     // Twin autocannon: two thin shafts, so its length reads as rate of fire
     // rather than as weight.
-    const shaft = 3;
-    const gap = 3;
+    const shaft = 3 * S;
+    const gap = 3 * S;
     const top = height / 2 - gap / 2 - shaft;
-    g.fillRect(0, top, width - 5, shaft);
-    g.fillRect(0, height / 2 + gap / 2, width - 5, shaft);
-    g.fillRect(width - 6, height / 2 - shaft, 6, shaft * 2);
+    g.fillRect(0, top, width - 5 * S, shaft);
+    g.fillRect(0, height / 2 + gap / 2, width - 5 * S, shaft);
+    g.fillRect(width - 6 * S, height / 2 - shaft, 6 * S, shaft * 2);
   } else if (archetype === 'heavy') {
     // Mortar: short, thick, and mostly muzzle.
-    const shaft = 10;
-    g.fillRect(0, (height - shaft) / 2, width - 9, shaft);
-    g.fillRect(width - 11, 0, 11, height);
+    const shaft = 10 * S;
+    g.fillRect(0, (height - shaft) / 2, width - 9 * S, shaft);
+    g.fillRect(width - 11 * S, 0, 11 * S, height);
   } else {
-    const shaft = 5;
-    g.fillRect(0, (height - shaft) / 2, width - 6, shaft);
-    g.fillRect(width - 7, 1, 7, height - 2);
+    const shaft = 5 * S;
+    g.fillRect(0, (height - shaft) / 2, width - 6 * S, shaft);
+    g.fillRect(width - 7 * S, 1 * S, 7 * S, height - 2 * S);
   }
 
   g.generateTexture(key, width, height);

@@ -4,6 +4,8 @@ import { APP_CONFIG } from '../app/config';
 import { APP_TITLE, GAME_COLORS, SCENE_KEYS } from '../app/constants';
 import { MAP_DEFINITIONS } from '../data/mapDefinitions';
 import { THEMES } from '../data/skins/themes';
+import { applyCameraScale } from '../app/applyRenderScale';
+import { RENDER_SCALE } from '../app/renderScale';
 
 export class MenuScene extends Phaser.Scene {
   private selectedThemeId: string = 'default';
@@ -13,6 +15,12 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    // The canvas is rendered at RENDER_SCALE; this puts the camera back
+
+    // into the fixed 1280x720 world every scene is laid out for.
+
+    applyCameraScale(this, RENDER_SCALE);
+
     const { width, height } = APP_CONFIG.dimensions;
 
     this.cameras.main.setBackgroundColor(GAME_COLORS.background);
