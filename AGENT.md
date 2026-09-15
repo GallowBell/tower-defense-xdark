@@ -47,6 +47,39 @@ tower still fired at most once per call.
 Get this wrong and the symptom is subtle: the board keeps animating while
 paused, or effects run at 1x while the game runs at 2x.
 
+### Resolution
+
+The world is a fixed 1280x720 that Phaser's FIT mode stretches to the screen.
+Stretching adds no pixels, so the canvas is built at `RENDER_SCALE` times the
+world instead (`src/app/renderScale.ts`), and **every scene zooms its camera by
+the same factor** in `create()`:
+
+```ts
+applyCameraScale(this, RENDER_SCALE);
+```
+
+A new scene that forgets this renders into a canvas two or three times the size
+it is laid out for, and everything lands in the top-left corner. For the same
+reason, never read `this.cameras.main.width` for layout — under a zoomed camera
+that is the canvas width in render pixels, not the 1280 the layout means. Use
+`APP_DIMENSIONS`.
+
+Phaser gives no help here: `resolution` was removed in 3.24 and never replaced,
+and `ScaleManager.zoom` is ignored entirely under FIT. Two things do not follow
+the camera and need their own handling:
+
+- **Text** rasterises glyphs at `style.resolution`, which defaults to 1. The
+  `text` factory is overridden once in `src/app/crispText.ts` so every Text gets
+  the right one. Note `GameObjectFactory.register` silently refuses to overwrite
+  an existing factory — `remove` has to come first.
+- **Textures drawn at 1:1** (tiles, barrels) are generated at
+  `TEXTURE_SUPERSAMPLE` and drawn at `SUPERSAMPLED_SCALE`. Tower bases and enemy
+  bodies are already generated much larger than they are drawn and need nothing.
+
+`e2e/smoke.spec.ts` has a 2560x1440 spec guarding all of it; the rest of the
+suite runs at 1280x720 where the scale is exactly 1 and none of this is
+exercised.
+
 ### Rendering
 
 Towers and enemies are `Container`-based views (`TowerView`, `EnemyView`), one
@@ -62,6 +95,25 @@ once in `PreloadScene`; Phaser's texture manager outlives a scene restart.
 The motion arithmetic lives in Phaser-free modules — `towerMotion.ts`,
 `enemyMotion.ts`, `projectileStyle.ts` — precisely so it can be unit-tested.
 Put new animation maths there, not in the view.
+
+### Waves
+
+A run's waves come from a `WaveSource`, not an array: `campaignSource()` is the
+eight authored waves, `endlessSource()` plays those same eight and then
+generates forever. `totalWaves` is `Infinity` for endless, which needs no
+special case — `GameStateStore.onWaveCleared` reads `wave < totalWaves`, and
+nothing is less than Infinity, so victory is simply unreachable.
+
+Generated waves are a pure function of their index (`waveGenerator.ts`): wave 12
+is wave 12 in every run, so the curve is testable and a best score compares
+like with like.
+
+What actually ends an endless run is `hpMultiplier`, which compounds per wave —
+**not** enemy count. Count is capped deliberately: more enemies also means more
+gold, so a linear threat never outpaces a player who reinvests. An earlier
+version grew count without limit and was still being beaten at wave 60 with 13
+of 20 lives left. `tests/balance/endless.test.ts` plays whole endless runs
+headlessly and asserts both that they end and that better play gets further.
 
 ## Traps this codebase has already hit
 

@@ -8,6 +8,7 @@ import {
   towerBaseTextureKey,
   towerBarrelTextureKey,
   baseScaleFor,
+  SUPERSAMPLED_SCALE,
 } from './textures';
 
 /** Tint for a tile the tower can go on. */
@@ -42,6 +43,7 @@ export class BuildGhost {
 
     this.barrel = scene.add
       .image(0, 0, towerBarrelTextureKey('basic'))
+      .setScale(SUPERSAMPLED_SCALE)
       .setOrigin(0.1, 0.5)
       .setRotation(-Math.PI / 2)
       .setDepth(RENDER_DEPTH.towers)

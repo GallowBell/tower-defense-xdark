@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
 import { APP_CONFIG, GAME_PARENT_ID } from './config';
+import { RENDER_SCALE, canvasSizeFor } from './renderScale';
 import { SCENE_FLOW, type SceneKey } from './constants';
 import { BootScene } from '../scenes/BootScene';
 import { GameScene } from '../scenes/GameScene';
@@ -23,8 +24,11 @@ export const GAME_SCENES = SCENE_FLOW.map(
 export const createGameConfig = (): Phaser.Types.Core.GameConfig => ({
   type: Phaser.AUTO,
   parent: GAME_PARENT_ID,
-  width: APP_CONFIG.dimensions.width,
-  height: APP_CONFIG.dimensions.height,
+  // The canvas is sized in *render* pixels, not world pixels: every scene's
+  // camera is zoomed by the same factor so gameplay still runs in the fixed
+  // 1280x720 world. See renderScale.ts for why this is the only lever Phaser
+  // leaves for a sharp canvas.
+  ...canvasSizeFor(RENDER_SCALE),
   backgroundColor: APP_CONFIG.backgroundColor,
   scene: [...GAME_SCENES],
   scale: {

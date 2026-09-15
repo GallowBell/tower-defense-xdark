@@ -23,6 +23,13 @@ export interface WaveDefinition {
   entries: SpawnEntry[];
   /** Bonus gold awarded to the player when the wave is cleared. */
   goldBonus: number;
+  /**
+   * Extra health multiplier for this wave's enemies, on top of
+   * DIFFICULTY.enemyHpScale. Absent on authored campaign waves, which is the
+   * point: endless needs a difficulty term that compounds, and the campaign's
+   * balance is asserted against the curve it already has.
+   */
+  hpMultiplier?: number;
 }
 
 export const WAVE_DEFINITIONS: WaveDefinition[] = [

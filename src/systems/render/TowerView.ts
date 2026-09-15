@@ -8,6 +8,7 @@ import {
   towerBarrelTextureKey,
   baseScaleFor,
   barrelTipDistance,
+  SUPERSAMPLED_SCALE,
 } from './textures';
 import {
   MOTION,
@@ -81,6 +82,8 @@ export class TowerView {
 
     this.barrel = scene.add
       .image(0, 0, towerBarrelTextureKey(tower.archetype))
+      // Generated at TEXTURE_SUPERSAMPLE and scaled back to its world size.
+      .setScale(SUPERSAMPLED_SCALE)
       // Pivot at the inner end, so the barrel swings around the tower centre.
       .setOrigin(0.1, 0.5)
       .setTint(color)

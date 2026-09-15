@@ -4,8 +4,11 @@ import { GAME_COLORS, SCENE_KEYS } from '../app/constants';
 import { GameStateStore } from '../systems/game-state/GameStateStore';
 import type { TowerUpgradeSystem } from '../systems/upgrade/TowerUpgradeSystem';
 import { TARGETING_LABELS } from '../systems/combat/TargetingSystem';
-import { WAVE_DEFINITIONS } from '../systems/waves/waveDefinitions';
 import { describeWave } from '../systems/waves/waveSummary';
+import { campaignSource, endlessSource } from '../systems/waves/waveSource';
+import { APP_DIMENSIONS } from '../app/constants';
+import { applyCameraScale } from '../app/applyRenderScale';
+import { RENDER_SCALE } from '../app/renderScale';
 
 export class UIScene extends Phaser.Scene {
   private goldText!: Phaser.GameObjects.Text;
@@ -27,6 +30,12 @@ export class UIScene extends Phaser.Scene {
   }
 
   create(): void {
+    // The canvas is rendered at RENDER_SCALE; this puts the camera back
+
+    // into the fixed 1280x720 world every scene is laid out for.
+
+    applyCameraScale(this, RENDER_SCALE);
+
     const store = this.registry.get('store') as GameStateStore | null;
     if (!store) return;
 
@@ -41,9 +50,9 @@ export class UIScene extends Phaser.Scene {
       GAME_COLORS.panel,
     ).color;
     this.add.rectangle(
-      this.cameras.main.width / 2,
+      APP_DIMENSIONS.width / 2,
       24,
-      this.cameras.main.width,
+      APP_DIMENSIONS.width,
       48,
       panelColor,
       0.9,
@@ -101,7 +110,7 @@ export class UIScene extends Phaser.Scene {
     // Right-aligned under the top bar, so it never collides with the upgrade
     // panel on the left. Composition comes straight from the wave data.
     this.wavePreviewText = this.add
-      .text(this.cameras.main.width - 16, 60, '', {
+      .text(APP_DIMENSIONS.width - 16, 60, '', {
         color: '#e2e8f0',
         fontFamily: 'Arial, sans-serif',
         fontSize: '14px',
@@ -130,7 +139,14 @@ export class UIScene extends Phaser.Scene {
   private wavePreview(gameState: string, wave: number): string {
     if (gameState === 'game_over' || gameState === 'victory') return '';
 
-    const composition = describeWave(WAVE_DEFINITIONS[wave - 1]);
+    // Endless generates waves past the authored eight, so the preview has to
+    // ask the same source the run does rather than index a fixed table.
+    const mode = this.registry.get('mode') as string | null;
+    const source = mode === 'endless' ? endlessSource() : campaignSource();
+    const definition = source.waveAt(wave - 1);
+    if (!definition) return '';
+
+    const composition = describeWave(definition);
     if (!composition) return '';
 
     const heading =
@@ -147,7 +163,17 @@ export class UIScene extends Phaser.Scene {
     const s = storeRef.snapshot();
     this.goldText.setText(`Gold: ${s.gold}`);
     this.livesText.setText(`Lives: ${s.lives}`);
-    this.waveText.setText(`Wave: ${s.wave}/${s.totalWaves}`);
+    // Endless has no denominator to show — "Wave: 12/Infinity" is worse than
+    // nothing. It shows the best instead, which is the number that matters.
+    const mode = this.registry.get('mode') as string | null;
+    if (mode === 'endless') {
+      const best = (this.registry.get('bestScore') as number | null) ?? 0;
+      this.waveText.setText(
+        best > 0 ? `Wave: ${s.wave}   (best ${best})` : `Wave: ${s.wave}`,
+      );
+    } else {
+      this.waveText.setText(`Wave: ${s.wave}/${s.totalWaves}`);
+    }
     this.stateText.setText('State: ' + s.gameState);
     this.wavePreviewText.setText(this.wavePreview(s.gameState, s.wave));
 

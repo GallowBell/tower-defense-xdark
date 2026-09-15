@@ -132,3 +132,60 @@ test.describe('browser smoke', () => {
     expect(errors).toEqual([]);
   });
 });
+
+/**
+ * The rest of the suite runs at exactly 1280x720, where the game renders 1:1
+ * and the high-DPI path is never touched. On any bigger or denser screen the
+ * canvas is rendered larger and every camera is zoomed to compensate, so a
+ * mistake there moves the whole coordinate system — clicks land on the wrong
+ * tile, or nothing at all. None of that is visible at the default viewport.
+ */
+test.describe('high-DPI screens', () => {
+  test.use({ viewport: { width: 2560, height: 1440 } });
+
+  test('renders at screen resolution and still takes clicks', async ({
+    page,
+  }) => {
+    const errors = watchForErrors(page);
+
+    await bootToMenu(page);
+
+    const canvas = page.locator('canvas');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('no canvas');
+
+    // The canvas must have at least as many pixels as it is displayed across,
+    // or it is being upscaled — which is what "it looks blurry" means.
+    const backing = await canvas.evaluate(
+      (el) => (el as HTMLCanvasElement).width,
+    );
+    expect(
+      backing,
+      'canvas should render at the size it is displayed at',
+    ).toBeGreaterThanOrEqual(Math.round(box.width));
+
+    // Game-space coordinates have to be mapped through the canvas box here:
+    // the canvas is 2560 wide but the world is still 1280.
+    const scaleX = box.width / 1280;
+    const scaleY = box.height / 720;
+    const click = (p: { x: number; y: number }): Promise<void> =>
+      page.mouse.click(box.x + p.x * scaleX, box.y + p.y * scaleY);
+
+    await click(MAP_CARD_1);
+    await page.waitForTimeout(1000);
+
+    const before = await canvas.screenshot();
+    await click(tile(9, 3));
+    await page.waitForTimeout(600);
+    const after = await canvas.screenshot();
+
+    // If the camera zoom and the canvas size disagreed, this click would miss
+    // the tile entirely and nothing would change.
+    expect(
+      Buffer.compare(before, after),
+      'clicking a build tile should place a tower',
+    ).not.toBe(0);
+
+    expect(errors).toEqual([]);
+  });
+});

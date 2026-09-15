@@ -5,6 +5,35 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>tower-defense-xdark</title>
+    <style>
+      /*
+        The game is a fixed 16:9 world that Phaser scales to fit. Without this
+        the page kept the browser's default 8px body margin, so "fit the
+        parent" meant fit a box 16px narrower than the screen, and the
+        letterbox was off-centre and a different colour from the game.
+      */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #10141f;
+      }
+
+      #game-root {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* The canvas is sized by Phaser; this only stops the inline-element gap. */
+      #game-root canvas {
+        display: block;
+      }
+    </style>
   </head>
   <body>
     <div id="game-root"></div>
