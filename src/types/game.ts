@@ -28,3 +28,11 @@ export interface HUDState {
   totalWaves: number;
   selectedTowerId: string | null;
 }
+
+/**
+ * How long a run lasts.
+ *
+ * `campaign` is the eight authored waves, won by clearing the last. `endless`
+ * plays those same eight and then keeps generating, and is only ever lost.
+ */
+export type GameMode = 'campaign' | 'endless';

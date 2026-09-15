@@ -96,6 +96,25 @@ The motion arithmetic lives in Phaser-free modules — `towerMotion.ts`,
 `enemyMotion.ts`, `projectileStyle.ts` — precisely so it can be unit-tested.
 Put new animation maths there, not in the view.
 
+### Waves
+
+A run's waves come from a `WaveSource`, not an array: `campaignSource()` is the
+eight authored waves, `endlessSource()` plays those same eight and then
+generates forever. `totalWaves` is `Infinity` for endless, which needs no
+special case — `GameStateStore.onWaveCleared` reads `wave < totalWaves`, and
+nothing is less than Infinity, so victory is simply unreachable.
+
+Generated waves are a pure function of their index (`waveGenerator.ts`): wave 12
+is wave 12 in every run, so the curve is testable and a best score compares
+like with like.
+
+What actually ends an endless run is `hpMultiplier`, which compounds per wave —
+**not** enemy count. Count is capped deliberately: more enemies also means more
+gold, so a linear threat never outpaces a player who reinvests. An earlier
+version grew count without limit and was still being beaten at wave 60 with 13
+of 20 lives left. `tests/balance/endless.test.ts` plays whole endless runs
+headlessly and asserts both that they end and that better play gets further.
+
 ## Traps this codebase has already hit
 
 - **Phaser reuses Scene instances across `scene.restart()`.** Field

@@ -2,13 +2,16 @@ import Phaser from 'phaser';
 
 import { APP_CONFIG } from '../app/config';
 import { APP_TITLE, GAME_COLORS, SCENE_KEYS } from '../app/constants';
-import { MAP_DEFINITIONS } from '../data/mapDefinitions';
+import { MAP_DEFINITIONS, DEFAULT_MAP_ID } from '../data/mapDefinitions';
 import { THEMES } from '../data/skins/themes';
 import { applyCameraScale } from '../app/applyRenderScale';
 import { RENDER_SCALE } from '../app/renderScale';
+import { readBestScore } from '../systems/progress/bestScore';
+import type { GameMode } from '../types/game';
 
 export class MenuScene extends Phaser.Scene {
   private selectedThemeId: string = 'default';
+  private selectedMode: GameMode = 'campaign';
 
   constructor() {
     super(SCENE_KEYS.MENU);
@@ -97,6 +100,61 @@ export class MenuScene extends Phaser.Scene {
 
       card.on('pointerdown', () => {
         this.startGame(mapId);
+      });
+    });
+
+    // ── Mode selector ──────────────────────────────────────────────────────
+    // Sits above the map cards' call to action because it changes what
+    // clicking a map means: eight waves and a win, or waves until you lose.
+    const savedMode = this.registry.get('selectedMode') as GameMode | null;
+    if (savedMode === 'campaign' || savedMode === 'endless') {
+      this.selectedMode = savedMode;
+    }
+
+    const modes: { id: GameMode; label: string; blurb: string }[] = [
+      { id: 'campaign', label: 'Campaign', blurb: '8 waves — win it' },
+      { id: 'endless', label: 'Endless', blurb: 'until you lose' },
+    ];
+    const modeW = 180;
+    const modeGap = 16;
+    const modeStartX =
+      (width - (modes.length * modeW + (modes.length - 1) * modeGap)) / 2 +
+      modeW / 2;
+
+    modes.forEach((mode, i) => {
+      const cx = modeStartX + i * (modeW + modeGap);
+      const cy = height * 0.26;
+      const selected = mode.id === this.selectedMode;
+
+      const card = this.add
+        .rectangle(cx, cy, modeW, 52, selected ? 0x7c3aed : 0x1e293b)
+        .setStrokeStyle(2, selected ? 0xa78bfa : 0x334155)
+        .setInteractive({ useHandCursor: true });
+
+      this.add
+        .text(cx, cy - 9, mode.label, {
+          color: GAME_COLORS.text,
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '17px',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5);
+
+      const best = readBestScore(mode.id, this.bestScoreMapId());
+      this.add
+        .text(cx, cy + 11, best > 0 ? `best: wave ${best}` : mode.blurb, {
+          color: GAME_COLORS.mutedText,
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '12px',
+        })
+        .setOrigin(0.5);
+
+      card.on('pointerdown', () => {
+        if (mode.id === this.selectedMode) return;
+        this.selectedMode = mode.id;
+        this.registry.set('selectedMode', mode.id);
+        // Redraw so the highlight and the best score follow the choice.
+        this.scene.restart();
       });
     });
 
@@ -194,8 +252,16 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
+  /** Which map the menu shows a best score for, before one is picked. */
+  private bestScoreMapId(): string {
+    return (
+      (this.registry.get('selectedMapId') as string | null) ?? DEFAULT_MAP_ID
+    );
+  }
+
   private startGame(mapId: string): void {
     this.registry.set('selectedMapId', mapId);
+    this.registry.set('selectedMode', this.selectedMode);
     this.registry.set('store', null);
     this.scene.start(SCENE_KEYS.GAME);
   }

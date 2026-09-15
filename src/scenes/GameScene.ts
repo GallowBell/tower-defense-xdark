@@ -5,6 +5,9 @@ import { MAP_DEFINITIONS, DEFAULT_MAP_ID } from '../data/mapDefinitions';
 import type { MapDefinition } from '../data/mapDefinitions';
 import type { GameStateStore } from '../systems/game-state/GameStateStore';
 import { RunSimulator, SIM_STEP } from '../systems/sim/RunSimulator';
+import { campaignSource, endlessSource } from '../systems/waves/waveSource';
+import { readBestScore, recordScore } from '../systems/progress/bestScore';
+import type { GameMode } from '../types/game';
 import type { ShotEvent } from '../systems/combat/CombatSystem';
 import type { EnemyState } from '../types/enemy';
 import type { TowerArchetype } from '../types/tower';
@@ -41,6 +44,9 @@ export class GameScene extends Phaser.Scene {
    */
   private sim!: RunSimulator;
   private map!: MapDefinition;
+  private mapId: string = DEFAULT_MAP_ID;
+  /** Campaign ends in a win; endless only ever ends in a loss. */
+  private mode: GameMode = 'campaign';
 
   /** Authoritative run state, owned by the simulator. Read by UIScene. */
   private get store(): GameStateStore {
@@ -147,7 +153,13 @@ export class GameScene extends Phaser.Scene {
 
     // ── 1. Map ────────────────────────────────────────────────────────────────
     const selectedMapId = this.registry.get('selectedMapId') as string | null;
-    this.map = MAP_DEFINITIONS[selectedMapId ?? DEFAULT_MAP_ID];
+    this.mapId = selectedMapId ?? DEFAULT_MAP_ID;
+    this.map = MAP_DEFINITIONS[this.mapId];
+
+    const selectedMode = this.registry.get('selectedMode') as GameMode | null;
+    this.mode = selectedMode === 'endless' ? 'endless' : 'campaign';
+    this.registry.set('mode', this.mode);
+    this.registry.set('bestScore', readBestScore(this.mode, this.mapId));
 
     // ── 2. Enemy rendering ────────────────────────────────────────────────────
     this.enemyViews = new Map();
@@ -155,16 +167,21 @@ export class GameScene extends Phaser.Scene {
     // ── 3. The run ────────────────────────────────────────────────────────────
     // Hooks are presentation only — sound, sprites, particles. Every rule that
     // decides the run lives in RunSimulator.
-    this.sim = new RunSimulator(this.map, {
-      onSpawn: (enemy) => this.spawnEnemyView(enemy),
-      onShot: (shot) => this.handleShot(shot),
-      onLeak: (enemy) => {
-        this.soundManager.playEnemyDeath();
-        this.particleManager.enemyLeaked(enemy.x, enemy.y);
-        this.retireEnemyView(enemy.uid, 'leak');
+    this.sim = new RunSimulator(
+      this.map,
+      {
+        onSpawn: (enemy) => this.spawnEnemyView(enemy),
+        onShot: (shot) => this.handleShot(shot),
+        onLeak: (enemy) => {
+          this.soundManager.playEnemyDeath();
+          this.particleManager.enemyLeaked(enemy.x, enemy.y);
+          this.retireEnemyView(enemy.uid, 'leak');
+        },
+        onWaveCleared: () => this.soundManager.playWaveCleared(),
       },
-      onWaveCleared: () => this.soundManager.playWaveCleared(),
-    });
+      // Endless plays the same authored eight first, then keeps generating.
+      this.mode === 'endless' ? endlessSource() : campaignSource(),
+    );
     this.registry.set('store', this.sim.store);
 
     // ── 4. Combat visuals ─────────────────────────────────────────────────────
@@ -823,6 +840,15 @@ export class GameScene extends Phaser.Scene {
   private showOverlay(text: string, color: number): void {
     if (this.overlayShown) return;
     this.overlayShown = true;
+
+    // Waves fully cleared. A run that dies on wave 12 survived 11, and saying
+    // otherwise would inflate every score by one.
+    const survived =
+      this.store.gameState === 'victory'
+        ? this.store.totalWaves
+        : Math.max(0, this.store.wave - 1);
+    const newBest = recordScore(this.mode, this.mapId, survived);
+    this.registry.set('bestScore', readBestScore(this.mode, this.mapId));
     this.isPaused = false;
     this.speedMultiplier = 1;
     this.applyTimeScale();
@@ -845,6 +871,25 @@ export class GameScene extends Phaser.Scene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5, 0.5);
+
+    if (this.mode === 'endless') {
+      const best = readBestScore(this.mode, this.mapId);
+      this.add
+        .text(
+          width / 2,
+          height * 0.51,
+          newBest
+            ? `NEW BEST — ${survived} waves survived`
+            : `${survived} waves survived   ·   best ${best}`,
+          {
+            color: newBest ? '#fbbf24' : GAME_COLORS.mutedText,
+            fontFamily: 'Arial',
+            fontSize: '22px',
+            fontStyle: newBest ? 'bold' : 'normal',
+          },
+        )
+        .setOrigin(0.5);
+    }
 
     // Restart
     const btnRestart = this.add
