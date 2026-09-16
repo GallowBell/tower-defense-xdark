@@ -6,6 +6,8 @@ import { EnemyFactory } from '../enemies/EnemyFactory';
 import { WaveSystem } from '../waves/WaveSystem';
 import { WAVE_DEFINITIONS } from '../waves/waveDefinitions';
 import type { WaveDefinition } from '../waves/waveDefinitions';
+import { campaignSource } from '../waves/waveSource';
+import type { WaveSource } from '../waves/waveSource';
 import { CombatSystem } from '../combat/CombatSystem';
 import { nextTargetingMode } from '../combat/TargetingSystem';
 import type { TargetingMode } from '../../types/tower';
@@ -44,7 +46,8 @@ export interface RunSimulatorHooks {
 export class RunSimulator {
   readonly store = new GameStateStore();
   readonly map: MapDefinition;
-  readonly waves: WaveDefinition[];
+  /** Where this run's waves come from. Finite for a campaign, endless for endless. */
+  readonly waves: WaveSource;
 
   /** Enemies in the current wave, including this wave's dead until it clears. */
   enemies: EnemyState[] = [];
@@ -57,20 +60,27 @@ export class RunSimulator {
   private readonly waveSystem: WaveSystem;
   private readonly hooks: RunSimulatorHooks;
   private waveSpawnComplete = false;
+  /** The wave in progress, kept because its enemies read hpMultiplier at spawn. */
+  private activeWave: WaveDefinition | null = null;
 
   constructor(
     map: MapDefinition,
     hooks: RunSimulatorHooks = {},
-    waves: WaveDefinition[] = WAVE_DEFINITIONS,
+    // An array is still accepted, and means "a campaign of exactly these
+    // waves" — which is what every existing caller and test meant by it.
+    waves: readonly WaveDefinition[] | WaveSource = WAVE_DEFINITIONS,
   ) {
     this.map = map;
-    this.waves = waves;
+    this.waves = Array.isArray(waves)
+      ? campaignSource(waves)
+      : (waves as WaveSource);
     this.hooks = hooks;
     this.worldWaypoints = waypointsToWorld(map);
     this.waveSystem = new WaveSystem(new EnemyFactory());
-    // The wave list is the run's length — otherwise a caller could pass waves
-    // the store would never count as a victory.
-    this.store.totalWaves = waves.length;
+    // The source is the run's length — otherwise a caller could pass waves the
+    // store would never count as a victory. Infinity for an endless run, which
+    // is exactly why it never reaches one.
+    this.store.totalWaves = this.waves.totalWaves;
   }
 
   /** True once the run has been decided either way. */
@@ -170,11 +180,12 @@ export class RunSimulator {
     if (store.gameState !== 'idle' && store.gameState !== 'wave_cleared')
       return false;
 
-    const waveDef = this.waves[store.wave - 1];
+    const waveDef = this.waves.waveAt(store.wave - 1);
     if (!waveDef) return false;
 
     store.nextWave();
     this.waveSpawnComplete = false;
+    this.activeWave = waveDef;
     this.waveSystem.startWave(waveDef);
     return true;
   }
@@ -189,7 +200,11 @@ export class RunSimulator {
     if (store.gameState === 'wave_active') {
       this.waveSystem.update(dt, this.worldWaypoints[0], {
         onSpawn: (enemy) => {
-          const hpMult = DIFFICULTY.enemyHpScale(store.wave);
+          // Two terms: the campaign's own per-wave curve, and the endless
+          // wave's compounding multiplier, which is 1 for anything authored.
+          const hpMult =
+            DIFFICULTY.enemyHpScale(store.wave) *
+            (this.activeWave?.hpMultiplier ?? 1);
           enemy.hp = Math.round(enemy.hp * hpMult);
           enemy.maxHp = enemy.hp;
 
@@ -234,7 +249,7 @@ export class RunSimulator {
 
       const cleared = store.wave;
       const bonus = Math.round(
-        (this.waves[cleared - 1]?.goldBonus ?? 0) *
+        (this.waves.waveAt(cleared - 1)?.goldBonus ?? 0) *
           DIFFICULTY.rewardScale(cleared),
       );
       store.earnGold(bonus);
